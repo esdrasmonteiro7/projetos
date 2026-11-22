@@ -43,8 +43,8 @@ export function Icon({ n, s = 20, cls }) {
   return html`<svg class=${cls} width=${s} height=${s} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${P[n] || P.info} /></svg>`;
 }
 
-export function Logo({ size = 40 }) {
-  return html`<img class="brand-logo" src="/img/favicon.svg" width=${size} height=${size} alt="" />`;
+export function Logo({ size = 46 }) {
+  return html`<img class="brand-logo" src="/img/logo-96.png" srcset="/img/logo-96.png 1x, /img/logo-192.png 2x" width=${size} height=${size} alt="Bom Gosto da Amazônia" />`;
 }
 
 export function Badge({ tipo = 'mute', children, title }) {

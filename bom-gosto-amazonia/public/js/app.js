@@ -71,7 +71,7 @@ function Shell({ sessao, usuario, onSair }) {
     </aside>
     <div class=${cx('scrim', aberto && 'on')} onClick=${() => setAberto(false)}></div>
     <div class="main">
-      <div class="topbar"><button aria-label="Abrir menu" onClick=${() => setAberto(true)}><${Icon} n="menu" /></button><div class="t">Bom Gosto da Amazônia</div></div>
+      <div class="topbar"><button aria-label="Abrir menu" onClick=${() => setAberto(true)}><${Icon} n="menu" /></button><${Logo} size=${34} /><div class="t">Bom Gosto da Amazônia</div></div>
       <${Pagina} nome=${pagina} usuario=${usuario} key=${pagina} />
     </div>
     ${trocar && html`<${TrocarSenha} obrigatorio=${trocar === true} onClose=${() => setTrocar(false)} onFeito=${() => setTrocar(false)} />`}

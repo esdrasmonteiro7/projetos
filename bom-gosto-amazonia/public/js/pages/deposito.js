@@ -75,7 +75,7 @@ export default function Deposito({ usuario }) {
       <div style="padding:8px 4px 4px"><${Tabela} linhas=${prod.data.itens} vazio=${html`<${Empty} icon="box" titulo="Nenhuma produção planejada neste mês">Clique em "Planejar produção" para começar.<//>`} cols=${[
         { t: 'Data', r: (o) => fmtBR(o.data), cls: 'nowrap' }, { t: 'Produto', r: (o) => html`<b>${o.produto_nome}</b>${o.observacoes ? html`<span class="sub-l">${o.observacoes}</span>` : ''}` },
         { t: 'Planejado', num: true, r: (o) => fmtQtd(o.planejado) }, { t: 'Produzido', num: true, r: (o) => html`<b>${fmtQtd(o.produzido)}</b>` },
-        { t: 'Progresso', r: (o) => html`<div class="track" style="min-width:90px"><div class="fill" style=${{ width: `${Math.min(100, (o.produzido / o.planejado) * 100)}%` }}></div></div>` },
+        { t: 'Progresso', r: (o) => html`<div class="track o" style="min-width:90px"><div class="fill" style=${{ width: `${Math.min(100, (o.produzido / o.planejado) * 100)}%` }}></div></div>` },
         { t: 'Não produzido', num: true, r: (o) => o.faltou > 0 ? html`<span class="red semi">${fmtQtd(o.faltou)}</span>` : '—' },
         { t: 'Situação', r: (o) => html`<${Badge} tipo=${STATUS_ORDEM[o.status][0]}>${STATUS_ORDEM[o.status][1]}<//>` },
         { t: '', acoes: true, r: (o) => o.cancelada ? '' : html`<div class="row gap-s nw"><${Btn} sm tipo=${o.faltou > 0 ? 'primary' : undefined} onClick=${() => setModal({ tipo: 'produzir', o })}>Registrar produção<//>
@@ -95,10 +95,10 @@ function VisaoGeral({ d, mes, loading }) {
     <div class="kpis">
       <${KPI} cor=${COR.verde} rotulo="Entrou" valor=${fmtQtd(r.entradas)} sub="compras, devoluções e ajustes (+)" />
       <${KPI} cor=${COR.azul} rotulo="Produzido" valor=${fmtQtd(r.produzido)} sub=${`${fmtQtd(p.produzido_do_plano)} dentro do que foi planejado`} />
-      <${KPI} cor=${COR.laranja} rotulo="Saiu" valor=${fmtQtd(r.vendas_saidas + r.perdas)} sub=${`${fmtQtd(r.vendas_saidas)} vendas/saídas · ${fmtQtd(r.perdas)} perdas`} />
+      <${KPI} cor=${COR.marca} rotulo="Saiu" valor=${fmtQtd(r.vendas_saidas + r.perdas)} sub=${`${fmtQtd(r.vendas_saidas)} vendas/saídas · ${fmtQtd(r.perdas)} perdas`} />
       <${KPI} cor=${COR.violeta} rotulo="Retiradas pelos vendedores" valor=${fmtQtd(r.retiradas)} sub="levadas para vender" />
-      <${KPI} cor="#0f5a3a" rotulo="Estoque atual" valor=${`${fmtQtd(r.estoque.total_unidades)} un`} sub=${`Valor ${fmtBRL(r.estoque.valor_centavos)}`} />
-      <${KPI} alerta=${p.nao_produzido > 0} cor="#b3261e" rotulo="Não produzido (planejado)" valor=${html`<span class=${p.nao_produzido > 0 ? 'red' : ''}>${fmtQtd(p.nao_produzido)}</span>`} sub=${p.planejado ? `de ${fmtQtd(p.planejado)} planejados em ${p.ordens} ordens` : 'Nada planejado neste mês'} />
+      <${KPI} cor="#5d0710" rotulo="Estoque atual" valor=${`${fmtQtd(r.estoque.total_unidades)} un`} sub=${`Valor ${fmtBRL(r.estoque.valor_centavos)}`} />
+      <${KPI} alerta=${p.nao_produzido > 0} cor=${COR.alerta} rotulo="Não produzido (planejado)" valor=${html`<span class=${p.nao_produzido > 0 ? 'red' : ''}>${fmtQtd(p.nao_produzido)}</span>`} sub=${p.planejado ? `de ${fmtQtd(p.planejado)} planejados em ${p.ordens} ordens` : 'Nada planejado neste mês'} />
     </div>
     ${r.estoque.abaixo_minimo.length > 0 && html`<div class="alert warn"><${Icon} n="alert" /><div><b>Abaixo do estoque mínimo:</b> ${r.estoque.abaixo_minimo.map((a) => `${a.nome} (${fmtQtd(a.saldo)}/${fmtQtd(a.minimo)})`).join(' · ')}</div></div>`}
     <div class="card"><div class="card-h"><div><div class="card-t">Movimento por produto — ${ymLabel(mes)}</div><div class="card-s">Saldo é o estoque atual (todos os meses)</div></div></div>

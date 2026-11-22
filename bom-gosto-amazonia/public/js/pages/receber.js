@@ -5,6 +5,7 @@ import {
 import {
   PageHead, Select, SearchBox, Btn, Tabela, Pager, Empty, Modal, Field, Input, MoneyInput, Seg, ClientePicker, Icon, ErroCaixa, Spinner, StatusTitulo, Badge, KPI,
 } from '../ui.js';
+import { COR } from '../charts.js';
 
 async function abrirWhats(url) {
   try {
@@ -48,9 +49,9 @@ export default function Receber({ usuario }) {
       ${admin && html`<${Btn} tipo="primary" icon="plus" onClick=${() => setModal({ tipo: 'divida' })}>Lançar dívida<//>`}
     <//>
     ${visao === 'titulos' && tot && html`<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px">
-      <${KPI} cor="#eb6834" rotulo=${status === 'pagos' ? 'Valor pago' : 'Em aberto'} valor=${fmtBRL(status === 'pagos' ? tot.pago_total : tot.aberto_total)} sub=${`${tot.qtd} títulos · ${tot.clientes} clientes`} />
-      <${KPI} cor="#b3261e" alerta=${tot.vencido_total > 0} rotulo="Vencido" valor=${html`<span class=${tot.vencido_total > 0 ? 'red' : ''}>${fmtBRL(tot.vencido_total)}</span>`} sub=${tot.vencido_total > 0 ? 'Já passou do vencimento' : 'Nada atrasado'} />
-      <${KPI} cor="#1b7f4f" rotulo="Já pago (nestes títulos)" valor=${fmtBRL(tot.pago_total)} sub=${`de ${fmtBRL(tot.valor_total)} lançados`} />
+      <${KPI} cor=${COR.azul} rotulo=${status === 'pagos' ? 'Valor pago' : 'Em aberto'} valor=${fmtBRL(status === 'pagos' ? tot.pago_total : tot.aberto_total)} sub=${`${tot.qtd} títulos · ${tot.clientes} clientes`} />
+      <${KPI} cor=${COR.alerta} alerta=${tot.vencido_total > 0} rotulo="Vencido" valor=${html`<span class=${tot.vencido_total > 0 ? 'red' : ''}>${fmtBRL(tot.vencido_total)}</span>`} sub=${tot.vencido_total > 0 ? 'Já passou do vencimento' : 'Nada atrasado'} />
+      <${KPI} cor=${COR.verde} rotulo="Já pago (nestes títulos)" valor=${fmtBRL(tot.pago_total)} sub=${`de ${fmtBRL(tot.valor_total)} lançados`} />
     </div>`}
     <div class="card">
       <div class="pad-s row" style="border-bottom:1px solid var(--line)">
@@ -64,11 +65,11 @@ export default function Receber({ usuario }) {
         ${cliente && html`<button class="chip" onClick=${() => { setCliente(''); location.hash = '#/receber'; }}>Filtrando por 1 cliente <b>✕</b></button>`}
       </div>
       ${visao === 'titulos' ? (t.error && !t.data ? html`<div class="pad"><${ErroCaixa} erro=${t.error} onRetry=${t.reload} /></div>` : !t.data ? html`<${Spinner} />` : html`
-        ${admin && sel.size > 0 && html`<div class="pad-s row between" style="background:var(--g50);border-bottom:1px solid var(--line)"><b>${sel.size} selecionados · ${fmtBRL(selSoma)}</b><${Btn} tipo="primary" sm icon="check" onClick=${() => setModal({ tipo: 'lote', ids: [...sel], soma: selSoma })}>Dar baixa nos selecionados<//></div>`}
+        ${admin && sel.size > 0 && html`<div class="pad-s row between" style="background:var(--tint);border-bottom:1px solid var(--line)"><b>${sel.size} selecionados · ${fmtBRL(selSoma)}</b><${Btn} tipo="primary" sm icon="check" onClick=${() => setModal({ tipo: 'lote', ids: [...sel], soma: selSoma })}>Dar baixa nos selecionados<//></div>`}
         <div class=${t.loading ? 'carregando' : ''}><${Tabela} linhas=${itens} chave=${(x) => x.id} onRow=${(x) => setModal({ tipo: 'detalhe', id: x.id })}
           vazio=${html`<${Empty} icon="check" titulo=${status === 'vencidos' ? 'Nenhum título vencido' : 'Nada por aqui'}>Nenhum título encontrado com estes filtros.<//>`}
           cols=${[
-            ...(admin ? [{ t: '', w: '34px', cls: 'no-l', r: (x) => x.aberto_centavos > 0 ? html`<input type="checkbox" checked=${sel.has(x.id)} onChange=${() => toggle(x.id)} aria-label="Selecionar" style="width:18px;height:18px;accent-color:var(--g600)" />` : '' }] : []),
+            ...(admin ? [{ t: '', w: '34px', cls: 'no-l', r: (x) => x.aberto_centavos > 0 ? html`<input type="checkbox" checked=${sel.has(x.id)} onChange=${() => toggle(x.id)} aria-label="Selecionar" style="width:18px;height:18px;accent-color:var(--br600)" />` : '' }] : []),
             { t: 'Cliente', cls: 'col-nome', r: (x) => html`<b>${x.cliente_nome || '—'}</b>${x.documento || x.parcela ? html`<span class="sub-l">${[x.documento && `Doc ${x.documento}`, x.parcela && `Parcela ${x.parcela}`].filter(Boolean).join(' · ')}</span>` : ''}` },
             ...(admin ? [{ t: 'Vendedor', r: (x) => x.vendedor_nome || '—' }] : []),
             { t: 'Vencimento', cls: 'nowrap', r: (x) => fmtBR(x.vencimento) },

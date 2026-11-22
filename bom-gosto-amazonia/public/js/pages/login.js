@@ -20,7 +20,7 @@ export function Login({ sessao, onEntrou }) {
     } catch (e2) { setErro(e2.message); } finally { setCarregando(false); }
   };
   return html`<div class="login"><form class="login-card" onSubmit=${enviar}>
-    <div class="login-brand"><${Logo} size=${52} /><div><div class="brand-t1">Bom Gosto</div><div class="brand-t2">da Amazônia</div></div></div>
+    <div class="login-brand"><${Logo} size=${116} /><div class="sub-t">Painel de gestão</div></div>
     <h1>${setup ? 'Primeiro acesso' : 'Entrar no painel'}</h1>
     <p class="muted small" style="margin:0 0 18px">${setup ? 'Crie a conta do primeiro administrador. Depois você cadastra os outros administradores e os vendedores.' : 'Use o e-mail e a senha que o administrador cadastrou para você.'}</p>
     <div class="stack" style="gap:14px">

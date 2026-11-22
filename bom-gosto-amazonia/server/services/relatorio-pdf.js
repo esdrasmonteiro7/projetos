@@ -6,10 +6,12 @@ import { fmtBRL, fmtCompact, fmtQtd } from '../../shared/money.js';
 import { ymLabel, ymMonthName } from '../../shared/dates.js';
 
 const FONTS = path.join(config.root, 'server', 'assets', 'fonts');
+const LOGO = path.join(config.root, 'server', 'assets', 'logo-pdf.png');
 const C = {
-  ink: '#14231b', ink2: '#4a5a52', muted: '#86948c', line: '#e3e9e5', page: '#f4f7f4', card: '#ffffff',
-  g900: '#0b3b27', g700: '#0f5a3a', g600: '#1b7f4f', g100: '#e3f1e9', amber: '#f2b134', violet: '#6250d6', violet100: '#e9e6fa',
-  orange: '#eb6834', blue: '#2a78d6', red: '#b3261e',
+  ink: '#261a19', ink2: '#5b4b49', muted: '#85736f', line: '#ece4e0', page: '#f8f5f3', card: '#ffffff',
+  br900: '#3f050b', br800: '#5d0710', br700: '#7d0a14', br600: '#A6050F', br100: '#fbe3e4',
+  gold: '#F7A511', gold2: '#D98E00', ok: '#1b7f4f', okBg: '#e3f1e9',
+  violet: '#6250d6', violet100: '#e9e6fa', blue: '#2a78d6', teal: '#1b8a8a', red: '#b3261e', trackMiss: '#f7d9d9',
 };
 const W = 595.28;
 const H = 841.89;
@@ -46,7 +48,7 @@ function txt(doc, s, x, y, { font = 'I4', size = 9, color = C.ink, width, align 
 
 function card(doc, x, y, w, h, r = 14) {
   doc.save();
-  doc.fillColor(C.g900).fillOpacity(0.045).roundedRect(x, y + 3, w, h, r).fill();
+  doc.fillColor(C.br900).fillOpacity(0.045).roundedRect(x, y + 3, w, h, r).fill();
   doc.fillOpacity(0.03).roundedRect(x, y + 6, w, h, r + 1).fill();
   doc.restore();
   doc.roundedRect(x, y, w, h, r).fillColor(C.card).fill();
@@ -63,47 +65,65 @@ function barraTopo(doc, x, y, w, h, r, cor) {
   doc.restore();
 }
 
-function folhas(doc, x, y, escala = 1, opac = 0.07) {
+/** Espiga de trigo (detalhe da logo) desenhada em branco translúcido. */
+function trigo(doc, x, y, { escala = 1, rot = 0, opac = 0.1 } = {}) {
   doc.save();
-  doc.translate(x, y);
-  const folha = (rot, dx, dy, a, b) => {
-    doc.save();
-    doc.translate(dx, dy).rotate(rot);
-    doc.fillColor('#ffffff').fillOpacity(opac).ellipse(0, 0, a * escala, b * escala).fill();
-    doc.lineWidth(1).strokeColor('#ffffff').strokeOpacity(opac * 1.6).moveTo(-a * escala, 0).lineTo(a * escala, 0).stroke();
-    doc.restore();
-  };
-  folha(-38, 0, 0, 92, 30);
-  folha(18, -46, 58, 78, 25);
-  folha(-72, 62, 52, 64, 21);
-  folha(-8, 14, 118, 60, 18);
+  doc.translate(x, y).rotate(rot);
+  doc.lineWidth(1.8 * escala).strokeColor('#ffffff').strokeOpacity(opac * 1.5);
+  doc.moveTo(0, 0).bezierCurveTo(5 * escala, -45 * escala, 3 * escala, -90 * escala, 0, -135 * escala).stroke();
+  doc.fillColor('#ffffff').fillOpacity(opac);
+  for (let i = 0; i < 7; i++) {
+    const t = i / 6;
+    const gy = -(38 + t * 84) * escala;
+    const sx = 3.2 * escala * Math.sin(t * 2.2);
+    for (const lado of [-1, 1]) {
+      doc.save();
+      doc.translate(sx + lado * 5.2 * escala, gy).rotate(lado * 30);
+      doc.ellipse(0, 0, 4.4 * escala, 10 * escala).fill();
+      doc.restore();
+    }
+  }
+  doc.save();
+  doc.translate(0, -146 * escala);
+  doc.ellipse(0, 0, 3.8 * escala, 10 * escala).fill();
+  doc.restore();
   doc.restore();
 }
 
-function cabecalho(doc, { titulo, subtitulo, mes, escopo, grande = true }) {
-  const h = grande ? 150 : 92;
-  const grad = doc.linearGradient(0, 0, W, h).stop(0, C.g900).stop(1, C.g600);
+function cabecalho(doc, { titulo, subtitulo, mes, grande = true }) {
+  const h = grande ? 156 : 96;
+  const grad = doc.linearGradient(0, 0, W, h).stop(0, C.br900).stop(0.55, C.br700).stop(1, C.br600);
   doc.rect(0, 0, W, h).fill(grad);
-  folhas(doc, W - 70, grande ? 20 : 10, grande ? 1 : 0.7);
-  // marca
-  txt(doc, 'Bom Gosto', M, grande ? 34 : 24, { font: 'P7', size: grande ? 30 : 22, color: '#ffffff' });
-  txt(doc, 'da Amazônia', M + 1, grande ? 70 : 50, { font: 'P6', size: grande ? 15 : 12, color: C.amber });
+  const k = grande ? 1 : 0.62;
+  trigo(doc, W - 38, h + 8, { escala: 1.1 * k, rot: -8, opac: 0.11 });
+  trigo(doc, W - 92, h + 14, { escala: 1.0 * k, rot: -26, opac: 0.08 });
+  trigo(doc, W - 150, h + 20, { escala: 0.9 * k, rot: -44, opac: 0.06 });
+  // logo redonda
+  const L = grande ? 88 : 58;
+  const ly = grande ? 30 : 19;
+  doc.circle(M + L / 2, ly + L / 2, L / 2 + 3.5).fillColor('#ffffff').fillOpacity(0.2).fill().fillOpacity(1);
+  doc.image(LOGO, M, ly, { width: L, height: L });
+  // nome ao lado da logo
+  const tx = M + L + 16;
+  txt(doc, 'Bom Gosto', tx, grande ? 36 : 21, { font: 'P7', size: grande ? 27 : 19, color: '#ffffff' });
+  txt(doc, 'da Amazônia', tx + 1, grande ? 68 : 44, { font: 'P6', size: grande ? 14 : 10.5, color: C.gold });
   const pill = titulo.toUpperCase();
   doc.font('I7').fontSize(7.5);
   const pw = doc.widthOfString(pill, { characterSpacing: 1.4 }) + 20;
-  doc.roundedRect(M, grande ? 106 : 68, pw, 20, 10).fillColor('#ffffff').fillOpacity(0.16).fill().fillOpacity(1);
-  txt(doc, pill, M + 10, grande ? 112.5 : 74.5, { font: 'I7', size: 7.5, color: '#ffffff', spacing: 1.4 });
+  const py = grande ? 100 : 62;
+  doc.roundedRect(tx, py, pw, 20, 10).fillColor('#ffffff').fillOpacity(0.18).fill().fillOpacity(1);
+  txt(doc, pill, tx + 10, py + 6.5, { font: 'I7', size: 7.5, color: '#ffffff', spacing: 1.4 });
   // mês à direita
   const nomeMes = cap(ymMonthName(mes));
   const ano = mes.slice(0, 4);
   doc.font('P7').fontSize(grande ? 30 : 22);
   const wMes = doc.widthOfString(nomeMes);
-  txt(doc, nomeMes, W - M - wMes - 52, grande ? 34 : 24, { font: 'P7', size: grande ? 30 : 22, color: '#ffffff' });
-  txt(doc, ano, W - M - 46, grande ? 45 : 31, { font: 'P6', size: grande ? 18 : 13, color: C.amber });
+  txt(doc, nomeMes, W - M - wMes - 52, grande ? 36 : 24, { font: 'P7', size: grande ? 30 : 22, color: '#ffffff' });
+  txt(doc, ano, W - M - 46, grande ? 47 : 31, { font: 'P6', size: grande ? 18 : 13, color: C.gold });
   doc.font('I4').fontSize(9);
-  const e = subtitulo || escopo || '';
+  const e = subtitulo || '';
   const we = doc.widthOfString(e);
-  txt(doc, e, W - M - we, grande ? 80 : 54, { size: 9, color: '#d7eadf' });
+  txt(doc, e, W - M - we, grande ? 82 : 56, { size: 9, color: '#f3d9db' });
 }
 
 function rodape(doc, { empresa, geradoEm, pagina, total }) {
@@ -129,9 +149,11 @@ function kpi(doc, { x, y, w, h, cor, rotulo, valor, linha1, linha2, linha2Cor })
   if (linha2) txt(doc, linha2, x + 20, y + h - 21, { font: linha2Cor ? 'I6' : 'I4', size: 9, color: linha2Cor || C.muted, width: w - 40 });
 }
 
-function numeroMini(doc, { x, y, w, rotulo, valor, cor }) {
-  txt(doc, rotulo.toUpperCase(), x, y, { font: 'I7', size: 7.5, color: C.muted, spacing: 0.9 });
-  txt(doc, valor, x, y + 12, { font: 'P6', size: 15, color: cor || C.ink, width: w });
+function numeroMini(doc, { x, y, w, rotulo, valor, dot }) {
+  const dx = dot ? 11 : 0;
+  if (dot) doc.circle(x + 3.5, y + 3.6, 3.2).fillColor(dot).fill();
+  txt(doc, rotulo.toUpperCase(), x + dx, y, { font: 'I7', size: 7.5, color: C.muted, spacing: 0.9 });
+  txt(doc, valor, x + dx, y + 12, { font: 'P6', size: 15, color: C.ink, width: w });
 }
 
 // ---------------------------------------------------------------- gráfico de colunas agrupadas (vendido x recebido)
@@ -151,9 +173,9 @@ function graficoMeses(doc, { x, y, w, h, meses }) {
   txt(doc, 'últimos 6 meses', x + 18, y + 30, { size: 8, color: C.muted });
   // legenda
   const lx = x + w - 150;
-  doc.roundedRect(lx, y + 18, 8, 8, 2).fillColor(C.g600).fill();
+  doc.roundedRect(lx, y + 18, 8, 8, 2).fillColor(C.br600).fill();
   txt(doc, 'Vendido', lx + 13, y + 17.5, { size: 8.5, color: C.ink2 });
-  doc.roundedRect(lx + 68, y + 18, 8, 8, 2).fillColor(C.violet).fill();
+  doc.roundedRect(lx + 68, y + 18, 8, 8, 2).fillColor(C.gold2).fill();
   txt(doc, 'Recebido', lx + 81, y + 17.5, { size: 8.5, color: C.ink2 });
 
   const gx = x + 48;
@@ -175,8 +197,8 @@ function graficoMeses(doc, { x, y, w, h, meses }) {
     const cx = gx + slot * i + slot / 2;
     const h1 = (m.vendido / topo) * gh;
     const h2 = (m.recebido / topo) * gh;
-    barraTopo(doc, cx - bw - 1, gy + gh - h1, bw, h1, 4, C.g600);
-    barraTopo(doc, cx + 1, gy + gh - h2, bw, h2, 4, C.violet);
+    barraTopo(doc, cx - bw - 1, gy + gh - h1, bw, h1, 4, C.br600);
+    barraTopo(doc, cx + 1, gy + gh - h2, bw, h2, 4, C.gold2);
     const lab = mesCurto(m.ym);
     doc.font(i === meses.length - 1 ? 'I7' : 'I4').fontSize(8);
     txt(doc, lab, cx - doc.widthOfString(lab) / 2, gy + gh + 9, { font: i === meses.length - 1 ? 'I7' : 'I4', size: 8, color: i === meses.length - 1 ? C.ink : C.muted });
@@ -222,11 +244,11 @@ function paginaResumo(doc, d, ctx) {
   const ch = 118;
   const proxNome = cap(ymMonthName(d.proximo_mes));
   kpi(doc, {
-    x: M, y: top, w: cw, h: ch, cor: C.g600, rotulo: 'Vendido no mês', valor: fmtBRL(d.vendido.total),
+    x: M, y: top, w: cw, h: ch, cor: C.br600, rotulo: 'Vendido no mês', valor: fmtBRL(d.vendido.total),
     linha1: `${d.vendido.qtd} ${d.vendido.qtd === 1 ? 'venda' : 'vendas'}`, linha2: d.vendido.qtd ? `Ticket médio ${fmtBRL(d.vendido.ticket_medio)}` : 'Nenhuma venda lançada',
   });
   kpi(doc, {
-    x: M + cw + gap, y: top, w: cw, h: ch, cor: C.orange, rotulo: 'Em aberto (a receber)', valor: fmtBRL(d.em_aberto.total),
+    x: M + cw + gap, y: top, w: cw, h: ch, cor: C.blue, rotulo: 'Em aberto (a receber)', valor: fmtBRL(d.em_aberto.total),
     linha1: `${d.em_aberto.clientes} ${d.em_aberto.clientes === 1 ? 'cliente devendo' : 'clientes devendo'} · ${d.em_aberto.qtd} ${d.em_aberto.qtd === 1 ? 'título' : 'títulos'}`,
     linha2: d.vencido.total > 0 ? `${fmtBRL(d.vencido.total)} já vencido` : 'Nada vencido', linha2Cor: d.vencido.total > 0 ? C.red : null,
   });
@@ -237,7 +259,7 @@ function paginaResumo(doc, d, ctx) {
   });
   const r = d.retiradas;
   kpi(doc, {
-    x: M + cw + gap, y: top + ch + gap, w: cw, h: ch, cor: C.blue, rotulo: 'Retiradas no mês', valor: `${fmtQtd(r.unidades)} un`,
+    x: M + cw + gap, y: top + ch + gap, w: cw, h: ch, cor: C.teal, rotulo: 'Retiradas no mês', valor: `${fmtQtd(r.unidades)} un`,
     linha1: `em ${r.qtd} ${r.qtd === 1 ? 'retirada' : 'retiradas'}${r.valor > 0 ? ` · ${fmtBRL(r.valor)} em mercadoria` : ''}`,
     linha2: r.devolvidas > 0 ? `${fmtQtd(r.devolvidas)} un devolvidas` : 'Nenhuma devolução',
   });
@@ -245,9 +267,9 @@ function paginaResumo(doc, d, ctx) {
   // faixa de números menores
   const fy = top + 2 * ch + gap + 24;
   const colw = (W - 2 * M) / 3;
-  numeroMini(doc, { x: M + 4, y: fy, w: colw, rotulo: 'Recebido no mês', valor: fmtBRL(d.recebido.total), cor: C.g700 });
-  numeroMini(doc, { x: M + colw + 4, y: fy, w: colw, rotulo: 'Vence neste mês', valor: fmtBRL(d.vence_no_mes.total) });
-  numeroMini(doc, { x: M + 2 * colw + 4, y: fy, w: colw, rotulo: 'Pix recebido', valor: fmtBRL(d.recebido.pix) });
+  numeroMini(doc, { x: M + 4, y: fy, w: colw, rotulo: 'Recebido no mês', valor: fmtBRL(d.recebido.total), dot: C.gold2 });
+  numeroMini(doc, { x: M + colw + 4, y: fy, w: colw, rotulo: 'Vence neste mês', valor: fmtBRL(d.vence_no_mes.total), dot: C.violet });
+  numeroMini(doc, { x: M + 2 * colw + 4, y: fy, w: colw, rotulo: 'Pix recebido', valor: fmtBRL(d.recebido.pix), dot: C.gold2 });
 
   const gy = fy + 56;
   const gw = W - 2 * M - gap - 205;
@@ -277,9 +299,9 @@ function paginaVendedores(doc, d, ctx) {
     txt(doc, v.nome, cols.nome, y + 9, { font: 'I6', size: 10.5, color: C.ink, width: 200 });
     // barra de participação
     const bw = 170;
-    doc.roundedRect(cols.nome, y + 27, bw, 4, 2).fillColor(C.g100).fill();
+    doc.roundedRect(cols.nome, y + 27, bw, 4, 2).fillColor(C.br100).fill();
     const f = (v.vendido / totalVendido) * bw;
-    if (f > 0) doc.roundedRect(cols.nome, y + 27, Math.max(f, 4), 4, 2).fillColor(C.g600).fill();
+    if (f > 0) doc.roundedRect(cols.nome, y + 27, Math.max(f, 4), 4, 2).fillColor(C.br600).fill();
     const num = (val, xr, font = 'I4', cor = C.ink) => { const s = fmtBRL(val); doc.font(font).fontSize(9.5); txt(doc, s, xr - doc.widthOfString(s), y + 14, { font, size: 9.5, color: cor }); };
     num(v.vendido, R.vendido, 'I7');
     num(v.recebido, R.recebido);
@@ -335,9 +357,9 @@ function paginaDeposito(doc, d, ctx) {
     txt(doc, valor, x + 15, top + 32, { font: 'P7', size: s, color: C.ink });
     if (sub) txt(doc, sub, x + 15, top + 62, { size: 8, color: C.muted, width: cw - 24 });
   };
-  mini(0, C.g600, 'Entrou', fmtQtd(dep.entradas), 'compras e devoluções');
+  mini(0, C.ok, 'Entrou', fmtQtd(dep.entradas), 'compras e devoluções');
   mini(1, C.blue, 'Produzido', fmtQtd(dep.produzido), 'fabricado no mês');
-  mini(2, C.orange, 'Saiu', fmtQtd(dep.vendas_saidas + dep.perdas), 'vendas, saídas e perdas');
+  mini(2, C.br600, 'Saiu', fmtQtd(dep.vendas_saidas + dep.perdas), 'vendas, saídas e perdas');
   mini(3, C.violet, 'Retiradas', fmtQtd(dep.retiradas), 'levadas pelos vendedores');
 
   // produção planejada x produzida
@@ -348,8 +370,8 @@ function paginaDeposito(doc, d, ctx) {
   const pct = p.planejado > 0 ? Math.min(p.produzido_do_plano / p.planejado, 1) : 0;
   const bx = M + 20;
   const bw = W - 2 * M - 40;
-  doc.roundedRect(bx, py + 42, bw, 10, 5).fillColor(p.planejado > 0 ? '#f6dccf' : C.line).fill();
-  if (pct > 0) doc.roundedRect(bx, py + 42, Math.max(bw * pct, 10), 10, 5).fillColor(C.g600).fill();
+  doc.roundedRect(bx, py + 42, bw, 10, 5).fillColor(p.planejado > 0 ? C.trackMiss : C.line).fill();
+  if (pct > 0) doc.roundedRect(bx, py + 42, Math.max(bw * pct, 10), 10, 5).fillColor(C.ok).fill();
   txt(doc, `${fmtQtd(p.produzido_do_plano)} produzidos`, bx, py + 62, { font: 'I7', size: 10, color: C.ink });
   doc.font('I7').fontSize(10);
   const t2 = `${fmtQtd(p.nao_produzido)} não produzidos`;

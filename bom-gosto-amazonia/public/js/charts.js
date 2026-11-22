@@ -3,7 +3,8 @@ import { html, useState, useEffect, useRef, fmtBRL, fmtCompact, ymAdd } from './
 
 const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 export const mesCurto = (ym) => MES[Number(ym.slice(5, 7)) - 1];
-export const COR = { verde: '#1b7f4f', violeta: '#6250d6', laranja: '#eb6834', azul: '#2a78d6', ambar: '#f2b134' };
+// Paleta: vinho e dourado vêm da logo; validada (vendido x recebido separam bem inclusive para daltônicos)
+export const COR = { marca: '#A6050F', ouro: '#D98E00', azul: '#2a78d6', violeta: '#6250d6', verde: '#1b7f4f', petroleo: '#1b8a8a', alerta: '#d03b3b' };
 
 function useLargura(ref) {
   const [w, setW] = useState(600);

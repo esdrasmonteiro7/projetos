@@ -238,7 +238,7 @@ const Vend = ({ r }) => (r._vendedor ? html`${r._vendedor.nome}` : r.vendedor_no
 const Cli = ({ r, c }) => html`<b>${c?.nome || r.nome || '—'}</b>${r._cliente ? html`<span class="sub-l ok">já cadastrado</span>` : html`<span class="sub-l" style="color:var(--blue)">novo cliente</span>`}`;
 
 function colunasPrevia(tipo, { marcados, toggle, editarRegistro }) {
-  const chk = { t: '', r: (r) => html`<input type="checkbox" checked=${marcados.has(r._id)} onChange=${() => toggle(r._id)} aria-label="Importar esta linha" style="width:18px;height:18px;accent-color:var(--g600)" />` };
+  const chk = { t: '', r: (r) => html`<input type="checkbox" checked=${marcados.has(r._id)} onChange=${() => toggle(r._id)} aria-label="Importar esta linha" style="width:18px;height:18px;accent-color:var(--br600)" />` };
   const avisos = { t: 'Avisos', r: (r) => html`<${Avisos} r=${r} />` };
   if (tipo === 'vendas') return [chk, { t: 'Data', r: (r) => fmtBR(r.data) || (r.tipo_registro === 'cancelamento' ? '—' : html`<span class="red">sem data</span>`) }, { t: 'Nº', r: (r) => r.numero || '—' }, { t: 'Cliente', r: (r) => (r.tipo_registro === 'cancelamento' ? html`<b>Cancelar NF-e …${String(r.chave).slice(-9)}</b><span class="sub-l red">cancela a venda desta nota</span>` : html`<${Cli} r=${r} c=${r.cliente} />`) }, { t: 'Vendedor', r: (r) => html`<${Vend} r=${r} />` },
     { t: 'Itens', r: (r) => r.itens?.length || '—' }, { t: 'Total', num: true, r: (r) => (r.tipo_registro === 'cancelamento' ? '—' : html`<b>${fmtBRL(r.total_centavos)}</b>`) }, { t: 'Pagamento', r: (r) => `${FORMAS[r.forma_pagamento] || '—'}${r.parcelas?.length ? ` · ${r.parcelas.length}x` : ''}${r.pago === true ? ' · pago' : ''}` }, avisos];

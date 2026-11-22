@@ -22,6 +22,21 @@ Mais telas em [`docs/telas`](docs/telas) e um exemplo do PDF em [`docs/exemplo-r
 
 ---
 
+## Identidade visual (logo e cores da marca)
+
+O painel e o PDF usam a logo e as cores da **Bom Gosto da Amazônia**:
+
+| Cor | Código | Onde aparece |
+|---|---|---|
+| Vinho (da logo) | `#A6050F` | botões, menu ativo, gráficos (vendido) |
+| Vinho escuro | `#3F050B` → `#7D0A14` | menu lateral, cabeçalho do PDF |
+| Dourado do trigo | `#F7A511` | detalhes, nome "da Amazônia", gráficos (recebido: `#D98E00`) |
+
+Verde continua significando **pago/ok** e vermelho de alerta significa **atrasado**, para não confundir com a cor da marca.
+A logo original está em [`docs/marca/`](docs/marca) (e a versão redonda usada nas telas, em `public/img/`). Para trocar a logo no futuro, substitua esses arquivos e as cores em `public/css/app.css` (variáveis `--br*`) e `server/services/relatorio-pdf.js`.
+
+---
+
 ## 1. Testar no seu computador (opcional)
 
 Precisa do [Node.js 22](https://nodejs.org) instalado.
