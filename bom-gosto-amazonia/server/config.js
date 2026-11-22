@@ -1,0 +1,35 @@
+// Configuração central. Tudo vem de variáveis de ambiente (ver .env.example).
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// Carrega .env se existir (uso local). Em hospedagem, use as variáveis do painel do serviço.
+try {
+  const envFile = path.join(root, '.env');
+  if (fs.existsSync(envFile) && typeof process.loadEnvFile === 'function') process.loadEnvFile(envFile);
+} catch { /* ignora .env inválido */ }
+
+function validTZ(tz) {
+  try { new Intl.DateTimeFormat('en-CA', { timeZone: tz }); return true; } catch { return false; }
+}
+
+const env = process.env;
+const tzEnv = env.TZ && validTZ(env.TZ) && env.TZ !== 'UTC' ? env.TZ : null;
+
+export const config = {
+  root,
+  isProd: env.NODE_ENV === 'production',
+  port: Number(env.PORT) || 3000,
+  dataDir: path.resolve(env.DATA_DIR || path.join(root, 'data')),
+  setupCode: env.SETUP_CODE || '',
+  defaultTZ: tzEnv || 'America/Manaus',
+  maxUploadMB: Number(env.MAX_UPLOAD_MB) || 30,
+  anthropicKey: env.ANTHROPIC_API_KEY || '',
+  anthropicModel: env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
+};
+
+config.uploadDir = path.join(config.dataDir, 'uploads');
+config.dbPath = path.join(config.dataDir, 'painel.db');
+fs.mkdirSync(config.uploadDir, { recursive: true });

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe13261112345678000195550010000015011000015017" versao="4.00">
+  <ide><cUF>13</cUF><natOp>VENDA DE MERCADORIA</natOp><mod>55</mod><serie>1</serie><nNF>1501</nNF><dhEmi>2026-11-05T10:15:00-04:00</dhEmi><tpNF>1</tpNF><finNFe>1</finNFe></ide>
+  <emit><CNPJ>12345678000195</CNPJ><xNome>BOM GOSTO DA AMAZONIA LTDA</xNome></emit>
+  <dest><CNPJ>98765432000110</CNPJ><xNome>MERCADINHO SOUZA LTDA</xNome><enderDest><xLgr>Rua das Palmeiras</xLgr><nro>100</nro><xBairro>Centro</xBairro><xMun>Manaus</xMun><fone>92988887777</fone></enderDest></dest>
+      <det nItem="1"><prod><cProd>P001</cProd><cEAN>SEM GTIN</cEAN><xProd>POLPA DE ACAI 1KG</xProd><NCM>20089900</NCM><CFOP>5102</CFOP><uCom>PCT</uCom><qCom>40.0000</qCom><vUnCom>28.0000000000</vUnCom><vProd>1120.00</vProd><uTrib>PCT</uTrib><qTrib>40.0000</qTrib><vUnTrib>28.0000000000</vUnTrib><indTot>1</indTot></prod></det>
+      <det nItem="2"><prod><cProd>P002</cProd><cEAN>SEM GTIN</cEAN><xProd>POLPA DE CUPUACU 1KG</xProd><NCM>20089900</NCM><CFOP>5102</CFOP><uCom>PCT</uCom><qCom>20.0000</qCom><vUnCom>24.0000000000</vUnCom><vProd>480.00</vProd><uTrib>PCT</uTrib><qTrib>20.0000</qTrib><vUnTrib>24.0000000000</vUnTrib><indTot>1</indTot></prod></det>
+      <det nItem="3"><prod><cProd>P006</cProd><cEAN>SEM GTIN</cEAN><xProd>FARINHA DE MANDIOCA 1KG</xProd><NCM>20089900</NCM><CFOP>5102</CFOP><uCom>PCT</uCom><qCom>30.0000</qCom><vUnCom>9.0000000000</vUnCom><vProd>270.00</vProd><uTrib>PCT</uTrib><qTrib>30.0000</qTrib><vUnTrib>9.0000000000</vUnTrib><indTot>1</indTot></prod></det>
+  <total><ICMSTot><vProd>1870.00</vProd><vDesc>0.00</vDesc><vNF>1870.00</vNF></ICMSTot></total>
+  <cobr><fat><nFat>1501</nFat><vOrig>1870.00</vOrig><vLiq>1870.00</vLiq></fat><dup><nDup>001</nDup><dVenc>2026-12-05</dVenc><vDup>935.00</vDup></dup><dup><nDup>002</nDup><dVenc>2027-01-05</dVenc><vDup>935.00</vDup></dup></cobr>
+  <pag><detPag><tPag>15</tPag><vPag>1870.00</vPag></detPag></pag>
+  <infAdic><infCpl>Pedido 41501. Vendedor: Marcos Lima. Obrigado pela preferencia.</infCpl></infAdic>
+</infNFe></NFe><protNFe versao="4.00"><infProt><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></nfeProc>

@@ -1,0 +1,95 @@
+// Painel (números), histórico de ações, configurações e backup.
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { Router } from 'express';
+import { db, getSettings, setSetting } from '../db.js';
+import { config } from '../config.js';
+import { requireAuth, requireAdmin, scopeOf, audit } from '../auth.js';
+import { bad, str, paging, likeTerm, ym as ymParam } from '../lib/http.js';
+import { resumo, hojeEmpresa } from '../services/metrics.js';
+import { todayISO } from '../../shared/dates.js';
+
+export const router = Router();
+router.use(requireAuth);
+
+router.get('/dashboard', (req, res) => {
+  const sc = scopeOf(req);
+  const ym = ymParam(req.query.mes, hojeEmpresa().slice(0, 7));
+  res.json(resumo({ ym, vendedorId: sc.vendedorId, admin: sc.admin }));
+});
+
+router.get('/alertas', (req, res) => {
+  const sc = scopeOf(req);
+  const hoje = hojeEmpresa();
+  const v = sc.vendedorId;
+  const out = {
+    pendentes: db.get(`SELECT COUNT(*) AS n FROM recebimentos WHERE status = 'pendente'${v ? ' AND vendedor_id = ?' : ''}`, ...(v ? [v] : [])).n,
+    vencidos: db.get(`SELECT COUNT(*) AS n FROM v_titulos WHERE cancelado = 0 AND valor_centavos > pago_centavos AND vencimento < ?${v ? ' AND vendedor_id = ?' : ''}`, hoje, ...(v ? [v] : [])).n,
+    sem_baixa: sc.admin ? db.get("SELECT COUNT(*) AS n FROM v_recebimentos WHERE status = 'confirmado' AND valor_centavos > alocado_centavos").n : 0,
+  };
+  res.json(out);
+});
+
+router.get('/auditoria', requireAdmin, (req, res) => {
+  const { limite, offset, pagina } = paging(req.query, { max: 200, def: 60 });
+  const where = [];
+  const params = [];
+  if (req.query.busca) {
+    where.push("(acao LIKE ? ESCAPE '\\' OR usuario_nome LIKE ? ESCAPE '\\' OR detalhes LIKE ? ESCAPE '\\')");
+    const t = likeTerm(req.query.busca);
+    params.push(t, t, t);
+  }
+  const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const total = db.get(`SELECT COUNT(*) AS n FROM auditoria ${w}`, ...params).n;
+  const itens = db.all(`SELECT * FROM auditoria ${w} ORDER BY id DESC LIMIT ? OFFSET ?`, ...params, limite, offset);
+  res.json({ itens, total, pagina, limite });
+});
+
+const CHAVES = ['empresa_nome', 'empresa_telefone', 'empresa_cnpj', 'fuso_horario', 'msg_cobranca', 'vendas_a_vista_pagas'];
+
+router.get('/configuracoes', requireAdmin, (_req, res) => {
+  const s = getSettings();
+  res.json({
+    ...Object.fromEntries(CHAVES.map((k) => [k, s[k] ?? ''])),
+    ia_disponivel: !!config.anthropicKey,
+    versao: '1.0.0',
+    dados_em: config.dataDir,
+  });
+});
+
+router.put('/configuracoes', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  if (b.fuso_horario !== undefined) {
+    try { todayISO(b.fuso_horario); } catch { throw bad('Fuso horário inválido (exemplo: America/Manaus).'); }
+  }
+  for (const k of CHAVES) {
+    if (b[k] === undefined) continue;
+    const max = k === 'msg_cobranca' ? 600 : 160;
+    setSetting(k, str(b[k], { max, name: k }) ?? '');
+  }
+  audit(req, 'Alterou configurações', 'configuracoes', null, Object.keys(b).filter((k) => CHAVES.includes(k)));
+  res.json({ ok: true });
+});
+
+// Cópia de segurança do banco inteiro (um arquivo .db). Guarde em lugar seguro.
+router.get('/backup', requireAdmin, (req, res) => {
+  const tmpDir = path.join(config.dataDir, 'tmp');
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const tmp = path.join(tmpDir, `backup-${crypto.randomBytes(6).toString('hex')}.db`);
+  db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
+  audit(req, 'Baixou backup do banco de dados', 'backup');
+  const nome = `bom-gosto-backup-${hojeEmpresa()}.db`;
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="${nome}"`);
+  res.sendFile(tmp, (err) => {
+    fs.rm(tmp, { force: true }, () => {});
+    if (err && !res.headersSent) res.status(500).json({ erro: 'Não foi possível gerar o backup.' });
+  });
+});
+
+// Planilha com todos os dados (útil para conferir ou levar para o Excel)
+router.get('/saude', requireAdmin, (_req, res) => {
+  const n = (t) => db.get(`SELECT COUNT(*) AS n FROM ${t}`).n;
+  res.json({ vendas: n('vendas'), titulos: n('titulos'), recebimentos: n('recebimentos'), clientes: n('clientes'), produtos: n('produtos'), vendedores: n('vendedores') });
+});

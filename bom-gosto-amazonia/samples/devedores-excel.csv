@@ -1,0 +1,8 @@
+Cliente;Vendedor;Data da Compra;Vencimento;Valor;Pago;Observação
+Mercadinho Souza;Marcos Lima;05/10/2026;05/11/2026;1.870,00;Sim;Pedido 1480
+Padaria Pão de Ouro;Ana Paula;12/10/2026;12/11/2026;"2.450,50";Não;
+Lanchonete Estrela do Norte;Carlos;18/10/2026;18/11/2026;780,00;não;Ligar na segunda
+Supermercado Amazonas;Juliana Ferreira;25/10/2026;25/12/2026;5.230,00;;
+Hotel Rio Negro;Rafael;02/11/2026;02/12/2026;1.120,90;Sim;Pagou no Pix
+Casa do Açaí Tropical;Marcos Lima;08/11/2026;08/12/2026;640,00;;
+TOTAL;;;;12.091,40;;
