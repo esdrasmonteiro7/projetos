@@ -1,8 +1,8 @@
 import path from 'node:path';
 import express from 'express';
-import helmet from 'helmet';
 import compression from 'compression';
 import { config } from './config.js';
+import { middlewareSeguranca } from './seguranca.js';
 import { HttpError } from './lib/http.js';
 import { sessionMiddleware, csrfProtect } from './auth.js';
 import { router as acesso } from './routes/acesso.js';
@@ -16,30 +16,11 @@ import { router as relatorios } from './routes/relatorios.js';
 export function createApp() {
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', 1);
+  const tp = process.env.TRUST_PROXY;
+  app.set('trust proxy', tp === undefined || tp === '' ? 1 : /^\d+$/.test(tp) ? Number(tp) : tp === 'true');
 
-  app.use(
-    helmet({
-      contentSecurityPolicy: {
-        useDefaults: false,
-        directives: {
-          defaultSrc: ["'self'"],
-          scriptSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", 'data:', 'blob:'],
-          fontSrc: ["'self'"],
-          connectSrc: ["'self'"],
-          objectSrc: ["'none'"],
-          frameAncestors: ["'none'"],
-          baseUri: ["'self'"],
-          formAction: ["'self'"],
-        },
-      },
-      crossOriginEmbedderPolicy: false,
-      hsts: config.isProd ? { maxAge: 15552000 } : false,
-    }),
-  );
-  app.use(compression());
+  app.use(middlewareSeguranca(config.isProd));
+  if (!config.serverless) app.use(compression()); // na Netlify a própria rede (CDN) já comprime as respostas
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 

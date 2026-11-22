@@ -1,7 +1,21 @@
 // Banco de dados SQLite (embutido no Node 22, sem instalar nada). Um único arquivo: data/painel.db
+import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.js';
 import { criarBackupRemoto } from './services/backup-remoto.js';
+
+/** Abre o arquivo do banco com as configurações certas para cada modo de hospedagem. */
+function abrirConexao(caminho) {
+  const conn = new DatabaseSync(caminho);
+  // Servidor normal: WAL (rápido). Sem servidor (Netlify): o arquivo em /tmp é só uma cópia de trabalho do banco guardado
+  // no Blobs, então usamos o modo simples (o arquivo fica sempre completo, pronto para ser enviado) e sem fsync.
+  conn.exec(
+    config.serverless
+      ? 'PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 8000; PRAGMA synchronous = OFF;'
+      : 'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 8000; PRAGMA synchronous = NORMAL;',
+  );
+  return conn;
+}
 
 // Backup externo opcional (ver server/services/backup-remoto.js): restaura o banco ANTES de abri-lo, se ele não existir.
 let raw;
@@ -9,9 +23,8 @@ export const backupRemoto = criarBackupRemoto({
   dbPath: config.dbPath,
   snapshot: (destino) => raw.exec(`VACUUM INTO '${destino.replace(/'/g, "''")}'`),
 });
-await backupRemoto.restaurarSeNecessario();
-raw = new DatabaseSync(config.dbPath);
-raw.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 8000; PRAGMA synchronous = NORMAL;');
+if (!config.serverless) await backupRemoto.restaurarSeNecessario();
+raw = abrirConexao(config.dbPath);
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 
@@ -273,6 +286,14 @@ const MIGRATIONS = [
     COALESCE((SELECT SUM(b.valor_centavos) FROM baixas b WHERE b.recebimento_id = r.id), 0) AS alocado_centavos
   FROM recebimentos r;
   `,
+  // ---------- 2: limite de tentativas de login guardado no banco (hospedagem sem servidor: cada acesso pode cair num servidor diferente) ----------
+  `
+  CREATE TABLE tentativas_login (
+    chave TEXT PRIMARY KEY,
+    n INTEGER NOT NULL,
+    primeira INTEGER NOT NULL
+  );
+  `,
 ];
 
 function migrate() {
@@ -289,7 +310,6 @@ function migrate() {
     }
   }
 }
-migrate();
 
 // ---------- helpers de acesso ----------
 const cache = new Map();
@@ -316,8 +336,11 @@ function clean(params) {
 }
 
 let depth = 0;
+let escritas = 0; // quantas gravações já aconteceram (usado pela hospedagem sem servidor para saber se há o que salvar)
 export const db = {
-  raw,
+  get raw() { return raw; },
+  /** Contador crescente de gravações: se mudou durante uma requisição, o banco precisa ser salvo. */
+  escritas: () => escritas,
   all: (sql, ...p) => stmt(sql).all(...clean(p)).map((r) => ({ ...r })),
   get: (sql, ...p) => {
     const r = stmt(sql).get(...clean(p));
@@ -325,10 +348,10 @@ export const db = {
   },
   run: (sql, ...p) => {
     const r = stmt(sql).run(...clean(p));
-    if (Number(r.changes) > 0) backupRemoto.marcarSujo();
+    if (Number(r.changes) > 0) { escritas++; backupRemoto.marcarSujo(); }
     return { changes: Number(r.changes), id: Number(r.lastInsertRowid) };
   },
-  exec: (sql) => { raw.exec(sql); backupRemoto.marcarSujo(); },
+  exec: (sql) => { raw.exec(sql); escritas++; backupRemoto.marcarSujo(); },
   /** Executa várias operações como UMA só: ou grava tudo, ou nada. */
   tx(fn) {
     if (depth > 0) {
@@ -360,7 +383,32 @@ export const db = {
       throw e;
     }
   },
+
+  // ---- usados só na hospedagem sem servidor (o banco "de verdade" fica no Netlify Blobs) ----
+  /** Conteúdo atual do banco (arquivo completo). Só chamar fora de transação. */
+  bytes() {
+    if (!config.serverless) raw.exec('PRAGMA wal_checkpoint(TRUNCATE)'); // modo WAL: leva tudo para o arquivo principal
+    return fs.readFileSync(config.dbPath);
+  },
+  /** Troca o banco de trabalho por uma cópia baixada do armazenamento. */
+  substituir(conteudo) {
+    reiniciarArquivo(conteudo);
+  },
+  /** Começa um banco novo e vazio (primeiro uso). */
+  vazio() {
+    reiniciarArquivo(null);
+  },
 };
+
+function reiniciarArquivo(conteudo) {
+  cache.clear();
+  try { raw.close(); } catch { /* já fechado */ }
+  for (const ext of ['', '-wal', '-shm', '-journal']) fs.rmSync(config.dbPath + ext, { force: true });
+  if (conteudo) fs.writeFileSync(config.dbPath, conteudo);
+  depth = 0;
+  raw = abrirConexao(config.dbPath);
+  prepararBanco();
+}
 
 // ---------- configurações ----------
 const DEFAULTS = {
@@ -372,7 +420,15 @@ const DEFAULTS = {
     'Olá, {cliente}! Aqui é da {empresa}. Passando para lembrar do valor de {valor} com vencimento em {vencimento}. Se já pagou, por favor envie o comprovante do Pix. Obrigado!',
   vendas_a_vista_pagas: '1',
 };
-for (const [k, v] of Object.entries(DEFAULTS)) db.run('INSERT OR IGNORE INTO configuracoes (chave, valor) VALUES (?, ?)', k, v);
+function aplicarPadroes() {
+  for (const [k, v] of Object.entries(DEFAULTS)) db.run('INSERT OR IGNORE INTO configuracoes (chave, valor) VALUES (?, ?)', k, v);
+}
+/** Deixa o banco pronto para uso: cria/atualiza as tabelas e garante as configurações padrão. */
+function prepararBanco() {
+  migrate();
+  aplicarPadroes();
+}
+prepararBanco();
 
 export function getSettings() {
   const out = {};

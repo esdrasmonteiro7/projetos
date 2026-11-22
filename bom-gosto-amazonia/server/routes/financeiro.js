@@ -549,11 +549,11 @@ router.delete('/recebimentos/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-router.get('/recebimentos/:id/comprovante', (req, res) => {
+router.get('/recebimentos/:id/comprovante', async (req, res) => {
   const r = db.get('SELECT * FROM recebimentos WHERE id = ?', int(req.params.id, { required: true }));
   if (!r || !r.arquivo_id) throw notFound('Sem comprovante.');
   if (!isAdmin(req) && r.vendedor_id !== req.user.vendedor_id) throw notFound('Sem comprovante.');
-  const a = abrirArquivo(r.arquivo_id);
+  const a = await abrirArquivo(r.arquivo_id);
   if (!a) throw notFound('Arquivo não encontrado.');
   enviarArquivo(res, a);
 });

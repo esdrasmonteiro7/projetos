@@ -22,6 +22,8 @@ router.get('/sessao', (req, res) => {
     precisa_setup: total === 0,
     setup_requer_codigo: config.isProd || !!config.setupCode,
     empresa: getSetting('empresa_nome', 'Bom Gosto da Amazônia'),
+    // hospedagem sem servidor (Netlify) aceita ~6 MB por envio: a tela divide os arquivos em lotes
+    limite_envio_mb: config.serverless ? 4.5 : null,
   });
 });
 
@@ -57,7 +59,7 @@ router.post('/login', async (req, res) => {
   const keyIp = `ip|${req.ip}`;
   const keyUser = `${req.ip}|${email}`;
   loginLimiter.check(keyUser);
-  loginLimiter.check(keyIp);
+  loginLimiter.check(keyIp, 60); // por IP o limite é maior (atrás de proxy, vários usuários podem aparecer com o mesmo IP)
   const u = db.get('SELECT * FROM usuarios WHERE email = ?', email);
   const ok = await verifyPassword(senha, u ? u.senha_hash : DUMMY_HASH);
   if (!u || !ok || !u.ativo) {

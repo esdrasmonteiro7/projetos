@@ -1,0 +1,14 @@
+# Publicação na Netlify (plano grátis). Passo a passo no README, seção "Netlify".
+[build]
+  command = "node scripts/netlify-build.mjs"   # monta dist-netlify/ (site + cabeçalhos de segurança)
+  publish = "dist-netlify"
+
+[functions]
+  directory = "netlify/functions"              # api.mjs atende tudo em /api/*
+  node_bundler = "nft"                         # copia os arquivos como estão (não reescreve o código)
+  included_files = [
+    "server/assets/**",                        # logo e fontes do PDF
+    "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+    "node_modules/pdfjs-dist/standard_fonts/**",
+    "node_modules/pdfjs-dist/cmaps/**",
+  ]

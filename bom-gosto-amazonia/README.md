@@ -57,9 +57,44 @@ Na pasta [`samples/`](samples) há arquivos de exemplo (NF-e, planilha, PDF, Pix
 
 ## 2. Colocar na internet
 
-Este sistema precisa de um **servidor** e de um **banco de dados** — por isso o `web.app` do Firebase (que só hospeda sites estáticos de graça) não serve sem cartão de crédito. O caminho **grátis e sem cartão** que deixei pronto é a **Render (plano gratuito)** com **backup automático criptografado no seu GitHub**: o plano grátis da Render apaga o disco quando o serviço reinicia ou "dorme", então o painel guarda uma cópia dos dados (criptografada) num repositório privado seu e **restaura sozinho** ao voltar.
+Este sistema precisa de um **servidor** e de um **banco de dados** — por isso o `web.app` do Firebase (que só hospeda sites estáticos de graça) não serve sem cartão de crédito. A forma **grátis e sem cartão** que está **no ar** é a **Netlify** (Opção A). As demais opções ficam como alternativa.
 
-### Opção A — Grátis, sem cartão (Render + backup no GitHub)
+### Opção A — Netlify (no ar) · grátis, sem cartão
+
+**Endereço:** `https://bom-gosto-amazonia.netlify.app` (dá para trocar o nome do endereço em *Site configuration → Change project name*).
+
+**Como funciona por dentro**
+* As telas (HTML, CSS, JS, imagens) são servidas direto pela rede da Netlify; toda a API roda numa *função* da Netlify (`netlify/functions/api.mjs`).
+* O banco de dados (SQLite) fica guardado no **Netlify Blobs**. **Cada alteração é salva antes de o painel responder** — nunca aparece "salvo" sem ter salvo.
+* Se duas pessoas salvam ao mesmo tempo, a gravação da segunda é recusada e a operação é **refeita automaticamente** sobre os dados novos: ninguém sobrescreve o trabalho do outro (há testes automáticos para isso).
+* **Cópia diária** do banco (as últimas 30 ficam guardadas) e os **arquivos enviados** (PDFs, XMLs, comprovantes) também ficam no Blobs.
+* O limite de tentativas de senha vale para todos os acessos (fica no banco).
+
+**Limites do plano grátis (bom saber)**
+* Cada envio aceita até ~**4,5 MB** — a tela de importação divide os arquivos em lotes sozinha; um arquivo único maior que isso precisa ser dividido ou compactado em ZIP.
+* Cada ação tem até 30 segundos; respostas até ~6 MB (um PDF de relatório tem algumas centenas de KB).
+* A Netlify dá uma franquia mensal de uso (300 "créditos" no plano grátis; para o uso deste painel sobra muito). Se um dia acabar, o site pausa até o próximo ciclo — veja em *Team → Usage*.
+* O primeiro acesso depois de um tempo parado leva ~1 segundo a mais.
+
+**Primeiro acesso:** abra o endereço → **Primeiro acesso** → informe o **código de instalação** (valor da variável `SETUP_CODE`, em *Site configuration → Environment variables*) e crie o administrador. O código só vale enquanto não existe nenhum usuário.
+
+**Atualizar o painel (publicar uma nova versão)** — num computador com Node 22:
+```bash
+cd bom-gosto-amazonia
+npm install
+npm run netlify:build
+npx netlify-cli login                 # só na primeira vez
+npx netlify-cli deploy --prod --dir dist-netlify --functions netlify/functions --site bom-gosto-amazonia --no-build
+```
+Cada publicação gasta 15 dos 300 créditos mensais; não precisa publicar à toa. Os dados **não** são afetados por publicações.
+
+**Esqueceu a senha** e não há outro administrador? Em *Environment variables* crie `REDEFINIR_SENHA_EMAIL` (seu e-mail) e `REDEFINIR_SENHA_NOVA` (senha provisória), faça uma nova publicação (comando acima), entre com a provisória e depois **apague as duas variáveis**.
+
+**Ver, baixar ou restaurar os dados** (suporte): `node scripts/netlify-blobs.mjs` mostra os comandos (`listar`, `baixar`, `baixar-copia 2026-11-22`, `restaurar`, `zerar`). Precisa de `NETLIFY_AUTH_TOKEN` e `NETLIFY_SITE_ID`.
+
+**Importante:** não apague o site na Netlify — os dados ficam guardados no site. E continue baixando um **backup toda semana** (*Configurações e backup*): é a garantia extra, fora da Netlify.
+
+### Opção B — Render grátis, sem cartão (com backup no GitHub)
 
 **Endereço:** `https://bomgosto-painel.onrender.com` (ou outro nome livre que você escolher; domínio próprio pode ser ligado depois).
 
@@ -78,14 +113,14 @@ Este sistema precisa de um **servidor** e de um **banco de dados** — por isso 
 **Como fica no dia a dia**
 * Depois de **qualquer alteração**, o painel envia um novo backup em ~15 segundos (e ao desligar). Se o serviço reiniciar ou "dormir", ao voltar ele **restaura sozinho** o último backup (e não inicia com banco vazio se não conseguir restaurar).
 * O plano grátis **dorme após 15 minutos sem acesso** e leva cerca de 1 minuto para acordar no próximo acesso. Para evitar, crie um monitor gratuito no [UptimeRobot](https://uptimerobot.com) apontando para `https://SEU-ENDERECO.onrender.com/api/sessao` a cada 5 minutos (a Render dá 750 horas grátis por mês — suficiente para 1 serviço ligado o mês todo).
-* **O que NÃO é guardado no plano grátis:** os arquivos originais enviados (PDFs, XMLs, comprovantes). Todos os **dados** (vendas, dívidas, pagamentos, estoque…) ficam salvos. Para guardar também os arquivos, use um disco permanente (opção B).
+* **O que NÃO é guardado no plano grátis:** os arquivos originais enviados (PDFs, XMLs, comprovantes). Todos os **dados** (vendas, dívidas, pagamentos, estoque…) ficam salvos. Para guardar também os arquivos, use um disco permanente (opção C).
 * Evite usar o painel durante uma atualização do código (deploy): alterações dos últimos segundos antes de reiniciar podem não entrar no backup.
 * **Esqueceu a senha** e não há outro administrador? Na Render → **Environment**, crie `REDEFINIR_SENHA_EMAIL` (seu e-mail) e `REDEFINIR_SENHA_NOVA` (uma senha provisória), salve, entre com ela e depois **apague as duas variáveis**.
 
-### Opção B — Plano pago com disco permanente (mais simples e seguro)
+### Opção C — Plano pago com disco permanente (mais simples e seguro)
 Na Render, troque o plano do serviço para **Starter** (a partir de ~US$ 7/mês) e acrescente um **disco** de 1–5 GB montado em `/data` (~US$ 0,25 por GB/mês; confira em <https://render.com/pricing>). Os dados e os arquivos ficam no disco; o backup no GitHub continua funcionando como **cópia extra fora do servidor**. Mantenha `DATA_DIR=/data`.
 
-### Opção C — Outros serviços grátis
+### Opção D — Outros serviços
 * **Google Cloud (Cloud Run + Firebase Hosting `web.app`)** e **Oracle Cloud (VM "Always Free")** têm camadas gratuitas, mas **exigem cartão** para criar a conta. Dá para usar o mesmo `Dockerfile`; me avise se preferir um desses.
 * Qualquer servidor com Docker serve: monte um disco em `/data` e defina `SETUP_CODE`.
 
@@ -129,15 +164,15 @@ O painel **dá baixa automática** quando o Pix tem **nome e valor batendo** com
 
 ## 6. Segurança e cópia de segurança
 
-* **Backup automático** no seu GitHub (seção 2) e, além disso, **baixe um backup toda semana:** *Configurações e backup → Baixar backup agora* (arquivo com todos os dados) e guarde no Google Drive.
-* Cada vendedor só acessa os próprios dados (testado automaticamente). Senhas são guardadas criptografadas; após 8 tentativas erradas o login é bloqueado por 15 minutos.
+* **Dados guardados na nuvem** (Netlify: salvos a cada alteração + cópia diária) ou **backup automático no GitHub** (Render) — seção 2. Além disso, **baixe um backup toda semana:** *Configurações e backup → Baixar backup agora* (arquivo com todos os dados) e guarde no Google Drive.
+* Cada vendedor só acessa os próprios dados (testado automaticamente). Senhas são guardadas criptografadas; após 8 tentativas erradas o login é bloqueado por 15 minutos (o bloqueio vale para todos os acessos).
 * Esqueceu a senha? Outro administrador redefine em *Usuários e acessos*. Se for o único: veja "Esqueceu a senha" na seção 2 (variáveis `REDEFINIR_SENHA_*`) ou, com acesso ao terminal do servidor, `node scripts/redefinir-senha.js email@exemplo.com NovaSenha123`.
-* Os arquivos enviados (PDF, XML…) ficam no servidor em `/data/uploads`.
+* Os arquivos enviados (PDF, XML…) ficam no servidor em `/data/uploads` (ou no Netlify Blobs, na Netlify).
 
 ## 7. Para quem for mexer no código
 
-* **Tecnologia:** Node.js 22 + Express, banco SQLite (arquivo único em `DATA_DIR/painel.db`), front-end em Preact sem etapa de build, PDF com PDFKit, leitura de PDF com pdf.js.
-* **Pastas:** `server/` (API, regras, importação, PDF), `shared/` (dinheiro, datas e nomes — usado no servidor **e** no navegador), `public/` (telas), `scripts/` (demonstração, exemplos, recuperação de senha), `tests/`.
+* **Tecnologia:** Node.js 22 + Express, banco SQLite (arquivo único em `DATA_DIR/painel.db`; na Netlify, guardado no Blobs), front-end em Preact sem etapa de build, PDF com PDFKit, leitura de PDF com pdf.js.
+* **Pastas:** `server/` (API, regras, importação, PDF), `shared/` (dinheiro, datas e nomes — usado no servidor **e** no navegador), `public/` (telas), `server/serverless/` (modo Netlify: persistência no Blobs e ponte com o Express), `netlify/functions/` (a função), `scripts/` (demonstração, exemplos, recuperação de senha, build e suporte da Netlify), `tests/`.
 * **Dinheiro** é sempre guardado em **centavos** (inteiro). Datas em `AAAA-MM-DD`.
-* **Testes:** `npm test` (41 testes: segurança, isolamento entre vendedores, vendas/baixas, depósito, importação de todos os formatos, PDF).
+* **Testes:** `npm test` (66 testes: segurança, isolamento entre vendedores, vendas/baixas, depósito, importação de todos os formatos, PDF e o modo Netlify — gravação no Blobs, conflito entre dois acessos, falha de rede, cópia diária).
 * **Variáveis:** veja [`.env.example`](.env.example).

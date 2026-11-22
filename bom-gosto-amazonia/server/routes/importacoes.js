@@ -207,9 +207,9 @@ router.post('/importacoes/:id/descartar', (req, res) => {
   res.json({ ok: true });
 });
 
-router.get('/importacoes/:id/arquivo', (req, res) => {
+router.get('/importacoes/:id/arquivo', async (req, res) => {
   const imp = carregar(int(req.params.id, { required: true }));
-  const a = imp.arquivo_id ? abrirArquivo(imp.arquivo_id) : null;
+  const a = imp.arquivo_id ? await abrirArquivo(imp.arquivo_id) : null;
   if (!a) throw notFound('Arquivo não disponível.');
   enviarArquivo(res, a, { inline: false });
 });

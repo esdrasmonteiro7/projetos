@@ -1,6 +1,6 @@
 // Importar arquivos: PDF, XML de nota fiscal, planilhas, CSV, extrato (OFX) e ZIP — com prévia antes de gravar.
 import {
-  html, useState, useEffect, useRef, useMemo, api, qs, useApi, fmtBRL, fmtBR, fmtQtd, fmtDataHora, todayISO, FORMAS, TIPOS_MOV, tentar, toast, confirmar, cx,
+  html, useState, useEffect, useRef, useMemo, api, qs, useApi, fmtBRL, fmtBR, fmtQtd, fmtDataHora, todayISO, FORMAS, TIPOS_MOV, tentar, toast, confirmar, cx, ambiente,
 } from '../lib.js';
 import { norm } from '/shared/text.js';
 import {
@@ -28,12 +28,35 @@ export default function Importar() {
     setArquivos((a) => [...a, ...novos]);
   };
   const analisar = async () => {
+    // Em hospedagem com limite por envio (Netlify: ~6 MB), os arquivos vão em lotes que cabem no limite.
+    const limite = ambiente.limiteEnvioMB ? ambiente.limiteEnvioMB * 1024 * 1024 : Infinity;
+    const grande = arquivos.find((f) => f.size > limite);
+    if (grande) { toast(`“${grande.name}” tem ${(grande.size / 1048576).toFixed(1).replace('.', ',')} MB e o máximo por arquivo aqui é ${String(ambiente.limiteEnvioMB).replace('.', ',')} MB. Divida o arquivo ou compacte em ZIP.`, 'erro'); return; }
+    const lotes = [];
+    let atual = [];
+    let tam = 0;
+    for (const f of arquivos) {
+      if (atual.length && tam + f.size > limite) { lotes.push(atual); atual = []; tam = 0; }
+      atual.push(f);
+      tam += f.size;
+    }
+    if (atual.length) lotes.push(atual);
     setEnviando(true);
-    const fd = new FormData();
-    for (const f of arquivos) fd.append('arquivos', f, f.name);
-    const r = await tentar(() => api('/importacoes/analisar', { method: 'POST', form: fd }));
+    const acum = { importacoes: [], erros: [] };
+    let enviados = 0;
+    for (const lote of lotes) {
+      const fd = new FormData();
+      for (const f of lote) fd.append('arquivos', f, f.name);
+      const r = await tentar(() => api('/importacoes/analisar', { method: 'POST', form: fd }));
+      if (!r) break;
+      acum.importacoes.push(...r.importacoes);
+      acum.erros.push(...r.erros);
+      enviados += lote.length;
+    }
     setEnviando(false);
-    if (r) { setPrevias(r.importacoes); setErros(r.erros); setArquivos([]); setConcluidas({}); if (r.importacoes.length === 1) setRevisar(r.importacoes[0].id); }
+    if (enviados === 0) return;
+    setPrevias(acum.importacoes); setErros(acum.erros); setArquivos(arquivos.slice(enviados)); setConcluidas({});
+    if (acum.importacoes.length === 1) setRevisar(acum.importacoes[0].id);
   };
   const importarTudo = async () => {
     const lista = previas.filter((p) => !concluidas[p.id]);

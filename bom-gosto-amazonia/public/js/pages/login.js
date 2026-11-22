@@ -27,7 +27,7 @@ export function Login({ sessao, onEntrou }) {
       ${setup && html`<${Field} label="Seu nome"><${Input} value=${f.nome} onInput=${set('nome')} autocomplete="name" required /><//>`}
       <${Field} label="E-mail"><${Input} type="email" value=${f.email} onInput=${set('email')} autocomplete="username" inputmode="email" required autofocus /><//>
       <${Field} label=${setup ? 'Crie uma senha (mínimo 8 caracteres)' : 'Senha'}><${Input} type="password" value=${f.senha} onInput=${set('senha')} autocomplete=${setup ? 'new-password' : 'current-password'} required /><//>
-      ${setup && sessao.setup_requer_codigo && html`<${Field} label="Código de instalação" hint="É o valor de SETUP_CODE que você definiu no servidor."><${Input} value=${f.codigo} onInput=${set('codigo')} required /><//>`}
+      ${setup && sessao.setup_requer_codigo && html`<${Field} label="Código de instalação" hint="É o código de instalação que você recebeu (fica guardado no servidor como SETUP_CODE). Só vale para criar o primeiro administrador."><${Input} value=${f.codigo} onInput=${set('codigo')} required /><//>`}
       ${!setup && html`<${Check} checked=${f.lembrar} onChange=${set('lembrar')}>Manter conectado neste aparelho<//>`}
       ${erro && html`<div class="alert bad">${erro}</div>`}
       <${Btn} tipo="primary" type="submit" disabled=${carregando} cls="" >${carregando ? 'Aguarde…' : setup ? 'Criar conta e entrar' : 'Entrar'}<//>

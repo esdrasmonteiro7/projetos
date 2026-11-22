@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { Router } from 'express';
 import { db, getSettings, setSetting, backupRemoto } from '../db.js';
 import { config } from '../config.js';
@@ -9,6 +10,7 @@ import { requireAuth, requireAdmin, scopeOf, audit } from '../auth.js';
 import { bad, str, paging, likeTerm, ym as ymParam } from '../lib/http.js';
 import { resumo, hojeEmpresa } from '../services/metrics.js';
 import { todayISO } from '../../shared/dates.js';
+import { hospedagem } from '../services/hospedagem.js';
 
 export const router = Router();
 router.use(requireAuth);
@@ -21,7 +23,7 @@ router.get('/dashboard', (req, res) => {
 
 /** Dados em disco temporário (sem disco permanente)? Só faz sentido avisar em produção. */
 function dadosEfemeros() {
-  if (!config.isProd) return false;
+  if (!config.isProd || config.serverless) return false; // sem servidor (Netlify): o banco já fica guardado fora do disco temporário
   try { return fs.statSync(config.dataDir).dev === fs.statSync('/').dev; } catch { return false; }
 }
 const estadoBackup = () => ({ ...backupRemoto.estado, ativo: backupRemoto.ativo, config_erro: backupRemoto.cfg.erroConfig || null, dados_efemeros: dadosEfemeros() });
@@ -65,9 +67,10 @@ router.get('/configuracoes', requireAdmin, (_req, res) => {
   res.json({
     ...Object.fromEntries(CHAVES.map((k) => [k, s[k] ?? ''])),
     backup_remoto: estadoBackup(),
+    armazenamento: hospedagem.info(),
     ia_disponivel: !!config.anthropicKey,
     versao: '1.0.0',
-    dados_em: config.dataDir,
+    dados_em: config.serverless ? 'Netlify (armazenamento seguro, salvo a cada alteração)' : config.dataDir,
   });
 });
 
@@ -100,6 +103,14 @@ router.get('/backup', requireAdmin, (req, res) => {
   const tmp = path.join(tmpDir, `backup-${crypto.randomBytes(6).toString('hex')}.db`);
   db.raw.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
   audit(req, 'Baixou backup do banco de dados', 'backup');
+  if (config.serverless) {
+    // a resposta da Netlify é limitada a ~6 MB, então o backup vai compactado (.gz; abre com qualquer descompactador)
+    const gz = zlib.gzipSync(fs.readFileSync(tmp));
+    fs.rmSync(tmp, { force: true });
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', `attachment; filename="bom-gosto-backup-${hojeEmpresa()}.db.gz"`);
+    return res.send(gz);
+  }
   const nome = `bom-gosto-backup-${hojeEmpresa()}.db`;
   res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('Content-Disposition', `attachment; filename="${nome}"`);

@@ -2,6 +2,7 @@
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { db } from './db.js';
+import { config } from './config.js';
 import { HttpError, forbidden } from './lib/http.js';
 
 const scrypt = promisify(crypto.scrypt);
@@ -105,7 +106,9 @@ export function csrfProtect(req, _res, next) {
   const origin = req.get('origin');
   if (origin) {
     try {
-      if (new URL(origin).host !== req.get('host')) return next(new HttpError(403, 'Origem não permitida.'));
+      const h = new URL(origin).host;
+      const permitidos = new Set([req.get('host'), req.get('x-forwarded-host'), process.env.SPACE_HOST, ...String(process.env.ALLOWED_ORIGINS || '').split(',').map((x) => x.trim().replace(/^https?:\/\//, ''))].filter(Boolean));
+      if (!permitidos.has(h)) return next(new HttpError(403, 'Origem não permitida.'));
     } catch {
       return next(new HttpError(403, 'Origem inválida.'));
     }
@@ -129,23 +132,40 @@ export function scopeOf(req) {
 }
 
 // ---------- limite de tentativas de login ----------
+// Servidor normal: guardado na memória. Hospedagem sem servidor (Netlify): cada acesso pode cair num servidor diferente,
+// então o contador fica no banco de dados (tabela tentativas_login) e vale para todos.
 const tentativas = new Map();
+const MUITAS = () => new HttpError(429, 'Muitas tentativas. Aguarde alguns minutos e tente de novo.');
 export const loginLimiter = {
   max: 8,
   windowMs: 15 * 60 * 1000,
-  check(key) {
+  check(key, max = this.max) {
+    if (config.serverless) {
+      const e = db.get('SELECT n, primeira FROM tentativas_login WHERE chave = ?', key);
+      if (e && Date.now() - e.primeira <= this.windowMs && e.n >= max) throw MUITAS();
+      return;
+    }
     const e = tentativas.get(key);
     if (!e) return;
-    if (Date.now() - e.first > this.windowMs) { tentativas.delete(key); return; }
-    if (e.n >= this.max) throw new HttpError(429, 'Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+    if (Date.now() - e.primeira > this.windowMs) { tentativas.delete(key); return; }
+    if (e.n >= max) throw MUITAS();
   },
   hit(key) {
+    if (config.serverless) {
+      const agora = Date.now();
+      db.run('DELETE FROM tentativas_login WHERE primeira < ?', agora - this.windowMs); // limpa o que já venceu
+      db.run('INSERT INTO tentativas_login (chave, n, primeira) VALUES (?, 1, ?) ON CONFLICT(chave) DO UPDATE SET n = n + 1', key, agora);
+      return;
+    }
     const e = tentativas.get(key);
-    if (!e || Date.now() - e.first > this.windowMs) tentativas.set(key, { n: 1, first: Date.now() });
+    if (!e || Date.now() - e.primeira > this.windowMs) tentativas.set(key, { n: 1, primeira: Date.now() });
     else e.n++;
     if (tentativas.size > 5000) tentativas.clear();
   },
-  reset(key) { tentativas.delete(key); },
+  reset(key) {
+    if (config.serverless) db.run('DELETE FROM tentativas_login WHERE chave = ?', key);
+    else tentativas.delete(key);
+  },
 };
 
 // ---------- auditoria ----------

@@ -1,6 +1,6 @@
 // Administração: usuários e acessos, histórico de ações, configurações e backup.
 import {
-  html, useState, useEffect, api, qs, useApi, useDebounced, fmtDataHora, tentar, toast, confirmar, baixarUrl,
+  html, useState, useEffect, api, qs, useApi, useDebounced, fmtDataHora, fmtBR, tentar, toast, confirmar, baixarUrl,
 } from '../lib.js';
 import {
   PageHead, Select, SearchBox, Btn, Tabela, Pager, Empty, Modal, Field, Input, Check, Icon, ErroCaixa, Spinner, Badge,
@@ -97,15 +97,25 @@ export function Config() {
           <textarea class="textarea" rows="5" value=${f.msg_cobranca} onInput=${(e) => set('msg_cobranca')(e.target.value)}></textarea></div>
       </div>
       <div class="stack">
-        ${f.backup_remoto && html`<${BackupRemoto} b=${f.backup_remoto} onMudou=${reload} />`}
+        ${f.armazenamento ? html`<${ArmazenamentoNuvem} a=${f.armazenamento} />` : f.backup_remoto && html`<${BackupRemoto} b=${f.backup_remoto} onMudou=${reload} />`}
         <div class="card pad stack" style="gap:12px"><div><div class="card-t">Cópia de segurança (backup)</div><div class="card-s">Baixa um arquivo com TODOS os dados do painel (vendas, dívidas, pagamentos, cadastros e depósito). Guarde em um lugar seguro, como o Google Drive.</div></div>
           <div><${Btn} tipo="primary" icon="download" onClick=${() => baixarUrl('/api/backup')}>Baixar backup agora<//></div>
-          <div class="alert warn small"><${Icon} n="alert" /><div>Faça um backup <b>toda semana</b>. Os arquivos enviados (PDFs, XMLs) ficam guardados no servidor, em <code>${f.dados_em}/uploads</code>.</div></div></div>
+          <div class="alert warn small"><${Icon} n="alert" /><div>Faça um backup <b>toda semana</b>. ${f.armazenamento ? 'Seus dados já ficam guardados na nuvem, mas uma cópia sua (por exemplo no Google Drive) é a garantia extra.' : html`Os arquivos enviados (PDFs, XMLs) ficam guardados no servidor, em <code>${f.dados_em}/uploads</code>.`}</div></div></div>
         <div class="card pad"><div class="card-t" style="margin-bottom:10px">Situação do sistema</div>
           ${s ? html`<div class="chips">${[['Vendas', s.vendas], ['Dívidas/títulos', s.titulos], ['Recebimentos', s.recebimentos], ['Clientes', s.clientes], ['Produtos', s.produtos], ['Vendedores', s.vendedores]].map(([k, v]) => html`<span class="chip">${k} <b>${v}</b></span>`)}</div>` : html`<${Spinner} />`}
           <div class="small muted" style="margin-top:12px">Versão ${f.versao} · dados em <code>${f.dados_em}</code></div></div>
       </div>
     </div></div>`;
+}
+
+function ArmazenamentoNuvem({ a }) {
+  return html`<div class="card pad stack" style="gap:12px">
+    <div><div class="card-t">Dados guardados na nuvem (Netlify)</div>
+      <div class="card-s">Cada alteração é salva na hora — o painel só confirma depois de guardar. Também é feita uma cópia por dia, e as últimas 30 ficam guardadas.</div></div>
+    <div class="chips"><span class="chip">Última gravação <b>${a.ultima_gravacao ? fmtDataHora(a.ultima_gravacao) : '—'}</b></span>
+      <span class="chip">Cópia diária mais recente <b>${a.ultima_copia_diaria ? fmtBR(a.ultima_copia_diaria) : 'ainda não'}</b></span></div>
+    ${a.ultimo_erro && html`<div class="alert bad"><${Icon} n="alert" /><div>Última falha ao salvar: ${a.ultimo_erro}</div></div>`}
+  </div>`;
 }
 
 function BackupRemoto({ b, onMudou }) {

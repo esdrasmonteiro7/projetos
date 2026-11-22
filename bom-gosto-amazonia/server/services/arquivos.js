@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
 import { db } from '../db.js';
+import { hospedagem } from './hospedagem.js';
 
 const EXT_OK = new Set(['.pdf', '.xml', '.csv', '.tsv', '.txt', '.xlsx', '.xlsm', '.xls', '.ofx', '.zip', '.png', '.jpg', '.jpeg', '.webp']);
 
@@ -24,6 +25,7 @@ export function salvarArquivo({ buffer, nome, mime, user_id }) {
   const abs = path.join(config.uploadDir, rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   if (!fs.existsSync(abs)) fs.writeFileSync(abs, buffer, { mode: 0o640 });
+  hospedagem.aoSalvarArquivo(rel.split(path.sep).join('/')); // sem servidor: o arquivo também precisa ir para o armazenamento externo
   const nomeLimpo = path.basename(String(nome || 'arquivo')).replace(/[\u0000-\u001f]/g, '').slice(0, 200) || 'arquivo';
   const r = db.run(
     'INSERT INTO arquivos (nome_original, hash, tamanho, mime, caminho, criado_por) VALUES (?,?,?,?,?,?)',
@@ -60,11 +62,17 @@ export function enviarArquivo(res, a, { inline = true } = {}) {
   res.sendFile(a.abs);
 }
 
-export function abrirArquivo(id) {
+export async function abrirArquivo(id) {
   const a = db.get('SELECT * FROM arquivos WHERE id = ?', id);
   if (!a) return null;
   const abs = path.resolve(config.uploadDir, a.caminho);
   if (!abs.startsWith(path.resolve(config.uploadDir) + path.sep)) return null; // nunca sai da pasta de uploads
-  if (!fs.existsSync(abs)) return null;
+  if (!fs.existsSync(abs)) {
+    // sem servidor (Netlify): o disco é temporário, então o arquivo é buscado no armazenamento externo
+    const dados = await hospedagem.buscarArquivo(a.caminho.split(path.sep).join('/'));
+    if (!dados) return null;
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, dados, { mode: 0o640 });
+  }
   return { ...a, abs };
 }

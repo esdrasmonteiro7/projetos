@@ -9,6 +9,16 @@ export { parseMoney, fmtBRL, fmtNum, fmtQtd, fmtCompact, fmtBR, ymLabel, ymAdd, 
 // ---------------------------------------------------------------- API
 let csrf = null;
 export const setCsrf = (t) => { csrf = t; };
+/** Informações do servidor que mudam o comportamento da tela (ex.: limite de tamanho por envio em hospedagem sem servidor). */
+export const ambiente = { limiteEnvioMB: null };
+
+// Mensagens amigáveis para respostas que não vêm do painel (ex.: limites da hospedagem)
+const MSG_HTTP = {
+  413: 'O arquivo é grande demais para enviar de uma vez. Envie menos arquivos por vez ou divida o arquivo.',
+  502: 'O servidor não conseguiu responder agora. Tente de novo em instantes.',
+  503: 'O servidor está ocupado. Tente de novo em instantes.',
+  504: 'O servidor demorou demais para responder. Tente de novo (se for arquivo grande, envie menos por vez).',
+};
 
 export async function api(path, { method = 'GET', body, form, signal } = {}) {
   const headers = {};
@@ -26,7 +36,7 @@ export async function api(path, { method = 'GET', body, form, signal } = {}) {
   let data = null;
   if ((r.headers.get('content-type') || '').includes('application/json')) data = await r.json().catch(() => null);
   if (!r.ok) {
-    const err = new Error(data?.erro || `Erro ${r.status}`);
+    const err = new Error(data?.erro || MSG_HTTP[r.status] || `Erro ${r.status}`);
     err.status = r.status;
     err.data = data;
     if (r.status === 401) window.dispatchEvent(new CustomEvent('sessao-expirada'));

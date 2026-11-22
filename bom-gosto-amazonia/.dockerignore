@@ -10,3 +10,4 @@ docs
 *.db-wal
 *.db-shm
 *.zip
+dist-netlify

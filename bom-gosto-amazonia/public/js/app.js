@@ -1,5 +1,5 @@
 // Ponto de entrada: sessão, menu lateral, rotas e carregamento das telas.
-import { html, render, useState, useEffect, useRef, api, setCsrf, useRoute, useApi, go, cx } from './lib.js';
+import { html, render, useState, useEffect, useRef, api, setCsrf, ambiente, useRoute, useApi, go, cx } from './lib.js';
 import { Icon, Logo, Spinner, ToastHost, ConfirmHost, Btn } from './ui.js';
 import { Login, TrocarSenha } from './pages/login.js';
 
@@ -83,7 +83,7 @@ function App() {
   const [sessao, setSessao] = useState(null);
   const [usuario, setUsuario] = useState(null);
   const [erro, setErro] = useState(null);
-  const carregar = () => api('/sessao').then((s) => { setCsrf(s.csrf); setSessao(s); setUsuario(s.usuario); }).catch((e) => setErro(e));
+  const carregar = () => api('/sessao').then((s) => { setCsrf(s.csrf); ambiente.limiteEnvioMB = s.limite_envio_mb ?? null; setSessao(s); setUsuario(s.usuario); }).catch((e) => setErro(e));
   useEffect(() => {
     carregar();
     const f = () => { setUsuario(null); };
