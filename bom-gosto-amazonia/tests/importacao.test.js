@@ -234,3 +234,18 @@ test('só administrador importa e o histórico guarda o resultado', async () => 
   const bloqueado = await admin.raw('POST', '/api/importacoes/1/confirmar', { body: {}, headers: { cookie: '' } });
   assert.equal(bloqueado.status, 401);
 });
+
+test('XML de cancelamento da nota cancela a venda e suas parcelas', async () => {
+  const antes = (await contar('/api/vendas?mes=2026-11&limite=50')).itens.find((v) => v.numero === '1501');
+  assert.ok(antes && antes.situacao !== 'cancelada', 'a venda da NF-e 1501 existe (importada no teste anterior)');
+  const r = await analisar('nfe-cancelamento-1501.xml');
+  const p = r.importacoes[0];
+  assert.equal(p.tipo, 'vendas');
+  const det = await detalhe(p.id);
+  assert.equal(det.dados.registros[0].tipo_registro, 'cancelamento');
+  const res = await confirmar(p.id);
+  assert.equal(res.resultado.criados.canceladas, 1);
+  const depois = (await contar('/api/vendas?mes=2026-11&limite=50&status=todas')).itens.find((v) => v.numero === '1501');
+  assert.equal(depois.situacao, 'cancelada');
+  assert.equal((await contar('/api/titulos?status=abertos&busca=mercadinho')).totais.aberto_total, 0, 'parcelas canceladas não contam como dívida');
+});

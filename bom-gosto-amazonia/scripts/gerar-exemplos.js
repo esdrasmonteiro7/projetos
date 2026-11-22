@@ -33,6 +33,12 @@ w('nfe-001-mercadinho-souza.xml', nfe({ n: '1501', chave: '132611123456780001955
 w('nfe-002-padaria-pao-de-ouro.xml', nfe({ n: '1502', chave: '13261112345678000195550010000015021000015024', data: '2026-11-09', dest: { cnpj: '11222333000144', nome: 'PADARIA PAO DE OURO ME', rua: 'Av. Brasil', fone: '92977776666' }, itens: [{ cod: 'P005', nome: 'CASTANHA-DO-PARA 500G', un: 'PCT', q: 25, v: 38 }, { cod: 'P010', nome: 'BISCOITO DE CASTANHA 200G', un: 'PCT', q: 40, v: 11 }], parcelas: [{ venc: '2026-12-09', valor: 1390 }], tPag: '15', vendedor: 'Ana Paula Souza' }));
 w('nfe-003-restaurante-pix.xml', nfe({ n: '1503', chave: '13261112345678000195550010000015031000015031', data: '2026-11-12', dest: { cnpj: '55666777000188', nome: 'RESTAURANTE SABOR DA TERRA', rua: 'Rua do Comercio', fone: '92966665555' }, itens: [{ cod: 'P007', nome: 'TUCUPI 500ML', un: 'GF', q: 30, v: 14 }], parcelas: [], tPag: '17', vendedor: 'Carlos Monteiro' }));
 
+// XML de CANCELAMENTO da NF-e 1501 (evento 110111): ao importar, a venda correspondente é cancelada
+w('nfe-cancelamento-1501.xml', `<?xml version="1.0" encoding="UTF-8"?>
+<procEventoNFe versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe"><evento versao="1.00"><infEvento Id="ID11011113261112345678000195550010000015011000015017">
+<cOrgao>13</cOrgao><tpAmb>1</tpAmb><CNPJ>12345678000195</CNPJ><chNFe>13261112345678000195550010000015011000015017</chNFe><dhEvento>2026-11-20T10:00:00-04:00</dhEvento>
+<tpEvento>110111</tpEvento><nSeqEvento>1</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Cancelamento</descEvento><nProt>113260000000001</nProt><xJust>Erro de digitacao no pedido</xJust></detEvento></infEvento></evento></procEventoNFe>`);
+
 // ------------------------------------------------------------ CSV (Excel brasileiro: ; e Windows-1252)
 const csv = [
   'Cliente;Vendedor;Data da Compra;Vencimento;Valor;Pago;Observação',

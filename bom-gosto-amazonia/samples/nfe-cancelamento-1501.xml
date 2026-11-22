@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<procEventoNFe versao="1.00" xmlns="http://www.portalfiscal.inf.br/nfe"><evento versao="1.00"><infEvento Id="ID11011113261112345678000195550010000015011000015017">
+<cOrgao>13</cOrgao><tpAmb>1</tpAmb><CNPJ>12345678000195</CNPJ><chNFe>13261112345678000195550010000015011000015017</chNFe><dhEvento>2026-11-20T10:00:00-04:00</dhEvento>
+<tpEvento>110111</tpEvento><nSeqEvento>1</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Cancelamento</descEvento><nProt>113260000000001</nProt><xJust>Erro de digitacao no pedido</xJust></detEvento></infEvento></evento></procEventoNFe>

@@ -175,7 +175,8 @@ router.post('/importacoes/:id/confirmar', (req, res) => {
   if (!dados) throw bad('A prévia expirou. Envie o arquivo de novo.');
   const resultado = confirmarImportacao(imp, dados, req.body || {}, req.user);
   const resumo = { ...(imp.resumo_json ? JSON.parse(imp.resumo_json) : {}), resultado };
-  db.run("UPDATE importacoes SET status = 'confirmada', confirmado_em = strftime('%Y-%m-%dT%H:%M:%fZ','now'), resumo_json = ? WHERE id = ?", JSON.stringify(resumo), id);
+  // depois de confirmada, a prévia (pesada) não é mais necessária: guarda só o resumo e o que foi criado
+  db.run("UPDATE importacoes SET status = 'confirmada', confirmado_em = strftime('%Y-%m-%dT%H:%M:%fZ','now'), resumo_json = ?, dados_json = NULL WHERE id = ?", JSON.stringify(resumo), id);
   audit(req, 'Confirmou importação', 'importacao', id, resultado.criados);
   let sobra = null;
   if (imp.tipo === 'pagamentos') {

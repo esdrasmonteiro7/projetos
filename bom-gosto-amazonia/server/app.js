@@ -51,6 +51,7 @@ export function createApp() {
   for (const r of [acesso, cadastros, financeiro, deposito, admin, importacoes, relatorios]) app.use('/api', r);
   app.use('/api', (_req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
 
+  app.use('/fonts', express.static(path.join(config.root, 'public', 'fonts'), { maxAge: '30d', immutable: true }));
   app.use('/shared', express.static(path.join(config.root, 'shared'), { maxAge: 0, etag: true }));
   app.use(express.static(path.join(config.root, 'public'), { maxAge: 0, etag: true, index: 'index.html' }));
 
