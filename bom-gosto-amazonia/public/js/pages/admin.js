@@ -97,6 +97,7 @@ export function Config() {
           <textarea class="textarea" rows="5" value=${f.msg_cobranca} onInput=${(e) => set('msg_cobranca')(e.target.value)}></textarea></div>
       </div>
       <div class="stack">
+        ${f.backup_remoto && html`<${BackupRemoto} b=${f.backup_remoto} onMudou=${reload} />`}
         <div class="card pad stack" style="gap:12px"><div><div class="card-t">Cópia de segurança (backup)</div><div class="card-s">Baixa um arquivo com TODOS os dados do painel (vendas, dívidas, pagamentos, cadastros e depósito). Guarde em um lugar seguro, como o Google Drive.</div></div>
           <div><${Btn} tipo="primary" icon="download" onClick=${() => baixarUrl('/api/backup')}>Baixar backup agora<//></div>
           <div class="alert warn small"><${Icon} n="alert" /><div>Faça um backup <b>toda semana</b>. Os arquivos enviados (PDFs, XMLs) ficam guardados no servidor, em <code>${f.dados_em}/uploads</code>.</div></div></div>
@@ -105,4 +106,28 @@ export function Config() {
           <div class="small muted" style="margin-top:12px">Versão ${f.versao} · dados em <code>${f.dados_em}</code></div></div>
       </div>
     </div></div>`;
+}
+
+function BackupRemoto({ b, onMudou }) {
+  const [enviando, setEnviando] = useState(false);
+  const agora = async () => {
+    setEnviando(true);
+    await tentar(() => api('/backup/remoto/agora', { method: 'POST' }), 'Backup enviado para o GitHub!');
+    setEnviando(false);
+    onMudou();
+  };
+  return html`<div class="card pad stack" style="gap:12px">
+    <div><div class="card-t">Backup automático no GitHub</div>
+      <div class="card-s">Depois de qualquer alteração, o painel envia uma cópia criptografada para um repositório privado seu. Se o servidor reiniciar, os dados voltam sozinhos.</div></div>
+    ${b.ativo ? html`
+      <div class="chips"><span class="chip">Repositório <b>${b.repo}</b></span>
+        <span class="chip">Último backup <b>${b.ultimo_ok ? fmtDataHora(b.ultimo_ok) : 'ainda não enviado'}</b></span>
+        ${b.pendente ? html`<span class="chip" style="background:var(--amber-bg)">alterações aguardando envio</span>` : ''}
+        ${b.restaurado_de ? html`<span class="chip">Restaurado de <b>${b.restaurado_de.replace('painel-', '').replace('.db.enc', '')}</b></span>` : ''}</div>
+      ${(b.ultimo_erro || b.config_erro) && html`<div class="alert bad"><${Icon} n="alert" /><div>${b.config_erro || b.ultimo_erro}</div></div>`}
+      <div><${Btn} icon="refresh" disabled=${enviando} onClick=${agora}>${enviando ? 'Enviando…' : 'Fazer backup agora'}<//></div>`
+    : html`<div class="alert ${b.dados_efemeros ? 'bad' : 'info'}"><${Icon} n=${b.dados_efemeros ? 'alert' : 'info'} /><div>${b.dados_efemeros
+        ? 'NÃO está ligado — e os dados deste servidor estão em disco temporário. Configure BACKUP_GITHUB_REPO, BACKUP_GITHUB_TOKEN e BACKUP_KEY (passo a passo no README).'
+        : 'Não está ligado (opcional quando o servidor tem disco permanente). Para um backup extra fora do servidor, configure BACKUP_GITHUB_REPO, BACKUP_GITHUB_TOKEN e BACKUP_KEY.'}</div></div>`}
+  </div>`;
 }

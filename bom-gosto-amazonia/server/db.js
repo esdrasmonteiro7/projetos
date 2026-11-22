@@ -1,8 +1,16 @@
 // Banco de dados SQLite (embutido no Node 22, sem instalar nada). Um único arquivo: data/painel.db
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.js';
+import { criarBackupRemoto } from './services/backup-remoto.js';
 
-const raw = new DatabaseSync(config.dbPath);
+// Backup externo opcional (ver server/services/backup-remoto.js): restaura o banco ANTES de abri-lo, se ele não existir.
+let raw;
+export const backupRemoto = criarBackupRemoto({
+  dbPath: config.dbPath,
+  snapshot: (destino) => raw.exec(`VACUUM INTO '${destino.replace(/'/g, "''")}'`),
+});
+await backupRemoto.restaurarSeNecessario();
+raw = new DatabaseSync(config.dbPath);
 raw.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 8000; PRAGMA synchronous = NORMAL;');
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
@@ -317,9 +325,10 @@ export const db = {
   },
   run: (sql, ...p) => {
     const r = stmt(sql).run(...clean(p));
+    if (Number(r.changes) > 0) backupRemoto.marcarSujo();
     return { changes: Number(r.changes), id: Number(r.lastInsertRowid) };
   },
-  exec: (sql) => raw.exec(sql),
+  exec: (sql) => { raw.exec(sql); backupRemoto.marcarSujo(); },
   /** Executa várias operações como UMA só: ou grava tudo, ou nada. */
   tx(fn) {
     if (depth > 0) {

@@ -254,3 +254,6 @@ button { font-family: inherit; }
   .tools > .select, .tools > .input { flex: 1 1 100%; }
   .seg button { padding: 7px 11px; }
 }
+
+.faixa-alerta { padding: 14px 28px 0; max-width: 1360px; margin: 0 auto; }
+@media (max-width: 960px) { .faixa-alerta { padding: 12px 14px 0; } }

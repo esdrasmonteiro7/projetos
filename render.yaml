@@ -1,19 +1,16 @@
-# Render Blueprint — cria o painel Bom Gosto da Amazônia com disco permanente para o banco de dados.
-# Como usar: no painel da Render, "New +" → "Blueprint" → escolha este repositório → informe o SETUP_CODE → Apply.
+# Render Blueprint — painel Bom Gosto da Amazônia no plano GRÁTIS (sem cartão), com backup automático criptografado no GitHub.
+# Como usar: na Render, "New +" → "Blueprint" → escolha este repositório e a branch → preencha os 3 valores pedidos → Apply.
+# (Para um disco permanente em vez de backup, veja "Plano pago" no README: troque plan para starter e acrescente o bloco disk.)
 services:
   - type: web
-    name: bom-gosto-painel
+    name: bomgosto-painel
     runtime: docker
+    plan: free
+    region: ohio
     dockerfilePath: ./bom-gosto-amazonia/Dockerfile
     dockerContext: ./bom-gosto-amazonia
-    plan: starter            # precisa ser um plano pago para ter disco permanente (os dados ficam salvos)
-    region: virginia
     healthCheckPath: /api/sessao
     autoDeploy: true
-    disk:
-      name: dados-painel
-      mountPath: /data
-      sizeGB: 5
     envVars:
       - key: NODE_ENV
         value: production
@@ -22,4 +19,10 @@ services:
       - key: TZ
         value: America/Manaus   # fuso da empresa (Belém: America/Belem). Também dá para trocar depois em Configurações.
       - key: SETUP_CODE
-        sync: false             # a Render vai pedir este valor: um código secreto só seu para criar o 1º administrador
+        sync: false             # código secreto só seu, para criar o 1º administrador
+      - key: BACKUP_GITHUB_REPO
+        sync: false             # ex.: seuusuario/bomgosto-backup  (repositório PRIVADO só para os backups)
+      - key: BACKUP_GITHUB_TOKEN
+        sync: false             # token do GitHub com permissão "Contents: Read and write" nesse repositório
+      - key: BACKUP_KEY
+        generateValue: true     # senha que criptografa o backup — GUARDE uma cópia (Render → Environment)

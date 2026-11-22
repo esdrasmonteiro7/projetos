@@ -55,22 +55,39 @@ Na pasta [`samples/`](samples) há arquivos de exemplo (NF-e, planilha, PDF, Pix
 
 ---
 
-## 2. Colocar na internet (Render)
+## 2. Colocar na internet
 
-O painel precisa de um servidor que fique ligado e de um **disco permanente** (é onde ficam os dados). A forma mais simples é a [Render](https://render.com). O arquivo [`render.yaml`](../render.yaml) já deixa tudo configurado.
+Este sistema precisa de um **servidor** e de um **banco de dados** — por isso o `web.app` do Firebase (que só hospeda sites estáticos de graça) não serve sem cartão de crédito. O caminho **grátis e sem cartão** que deixei pronto é a **Render (plano gratuito)** com **backup automático criptografado no seu GitHub**: o plano grátis da Render apaga o disco quando o serviço reinicia ou "dorme", então o painel guarda uma cópia dos dados (criptografada) num repositório privado seu e **restaura sozinho** ao voltar.
 
-1. Crie uma conta na Render entrando **com o GitHub** e autorize o acesso ao repositório `projetos`.
-2. Na Render: **New + → Blueprint** → escolha o repositório → escolha a branch que contém o painel → **Apply**.
-3. A Render vai pedir o valor de **`SETUP_CODE`**: invente um código secreto e longo (ex.: `bomgosto-2026-amazonia-x9k2`). Guarde-o: ele só serve para criar o primeiro administrador.
-4. Aguarde o primeiro deploy (alguns minutos). A Render mostra o endereço, algo como `https://bom-gosto-painel.onrender.com`.
-5. Abra o endereço → tela **Primeiro acesso** → crie a conta do administrador (nome, e-mail, senha e o `SETUP_CODE`).
-6. (Opcional) Domínio próprio, por exemplo `painel.bomgostodaamazonia.com.br`: na Render, **Settings → Custom Domains**.
+### Opção A — Grátis, sem cartão (Render + backup no GitHub)
 
-**Custo:** é preciso um plano **pago** (o gratuito não tem disco permanente e os dados seriam perdidos). Na data desta escrita: instância a partir de ~US$ 7/mês + disco ~US$ 0,25 por GB/mês. Confira os valores atuais em <https://render.com/pricing>.
+**Endereço:** `https://bomgosto-painel.onrender.com` (ou outro nome livre que você escolher; domínio próprio pode ser ligado depois).
 
-**Atualizações:** quando o código mudar no GitHub, a Render publica sozinha. Os dados ficam no disco e **não se perdem**.
+1. **O código precisa estar no seu GitHub** (repositório `projetos`). Se o envio automático não funcionar, no GitHub use *Add file → Upload files* e arraste o conteúdo do `.zip`.
+2. **Crie o repositório de backup:** GitHub → **New repository** → nome `bomgosto-backup` → marque **Private** e **Add a README file** → Create.
+3. **Crie o token do backup:** GitHub → sua foto → *Settings* → *Developer settings* → *Personal access tokens* → **Fine-grained tokens** → *Generate new token*:
+   nome `painel-backup`; validade 1 ano (anote um lembrete para renovar); *Repository access* → **Only select repositories** → `bomgosto-backup`; *Permissions → Repository permissions* → **Contents: Read and write**. Gere e **copie o token** (começa com `github_pat_`).
+4. **Render:** crie a conta em [render.com](https://render.com) entrando **com o GitHub** → **New + → Blueprint** → escolha o repositório `projetos` (autorize o acesso) e a branch que tem o painel → preencha:
+   * `SETUP_CODE`: um código secreto e longo, só seu;
+   * `BACKUP_GITHUB_REPO`: `seuusuario/bomgosto-backup`;
+   * `BACKUP_GITHUB_TOKEN`: o token do passo 3 → **Apply**.
+5. Quando terminar o primeiro deploy, abra o endereço → **Primeiro acesso** → crie o administrador (com o `SETUP_CODE`).
+6. **Muito importante:** na Render, abra o serviço → **Environment** → copie o valor de **`BACKUP_KEY`** e guarde em lugar seguro (gerenciador de senhas). É a senha que protege os backups; sem ela eles não podem ser restaurados.
+7. Em **Configurações e backup**, confira que aparece *"Último backup: …"*. Se aparecer um aviso vermelho no topo do painel, há algo errado com o backup — leia a mensagem.
 
-> Se preferir outro serviço (Railway, Fly.io, um servidor VPS), o [`Dockerfile`](Dockerfile) funciona em qualquer um: basta montar um disco em `/data` e definir `SETUP_CODE`.
+**Como fica no dia a dia**
+* Depois de **qualquer alteração**, o painel envia um novo backup em ~15 segundos (e ao desligar). Se o serviço reiniciar ou "dormir", ao voltar ele **restaura sozinho** o último backup (e não inicia com banco vazio se não conseguir restaurar).
+* O plano grátis **dorme após 15 minutos sem acesso** e leva cerca de 1 minuto para acordar no próximo acesso. Para evitar, crie um monitor gratuito no [UptimeRobot](https://uptimerobot.com) apontando para `https://SEU-ENDERECO.onrender.com/api/sessao` a cada 5 minutos (a Render dá 750 horas grátis por mês — suficiente para 1 serviço ligado o mês todo).
+* **O que NÃO é guardado no plano grátis:** os arquivos originais enviados (PDFs, XMLs, comprovantes). Todos os **dados** (vendas, dívidas, pagamentos, estoque…) ficam salvos. Para guardar também os arquivos, use um disco permanente (opção B).
+* Evite usar o painel durante uma atualização do código (deploy): alterações dos últimos segundos antes de reiniciar podem não entrar no backup.
+* **Esqueceu a senha** e não há outro administrador? Na Render → **Environment**, crie `REDEFINIR_SENHA_EMAIL` (seu e-mail) e `REDEFINIR_SENHA_NOVA` (uma senha provisória), salve, entre com ela e depois **apague as duas variáveis**.
+
+### Opção B — Plano pago com disco permanente (mais simples e seguro)
+Na Render, troque o plano do serviço para **Starter** (a partir de ~US$ 7/mês) e acrescente um **disco** de 1–5 GB montado em `/data` (~US$ 0,25 por GB/mês; confira em <https://render.com/pricing>). Os dados e os arquivos ficam no disco; o backup no GitHub continua funcionando como **cópia extra fora do servidor**. Mantenha `DATA_DIR=/data`.
+
+### Opção C — Outros serviços grátis
+* **Google Cloud (Cloud Run + Firebase Hosting `web.app`)** e **Oracle Cloud (VM "Always Free")** têm camadas gratuitas, mas **exigem cartão** para criar a conta. Dá para usar o mesmo `Dockerfile`; me avise se preferir um desses.
+* Qualquer servidor com Docker serve: monte um disco em `/data` e defina `SETUP_CODE`.
 
 ---
 
@@ -112,9 +129,9 @@ O painel **dá baixa automática** quando o Pix tem **nome e valor batendo** com
 
 ## 6. Segurança e cópia de segurança
 
-* **Faça backup toda semana:** *Configurações e backup → Baixar backup agora* (um arquivo com todos os dados). Guarde no Google Drive.
+* **Backup automático** no seu GitHub (seção 2) e, além disso, **baixe um backup toda semana:** *Configurações e backup → Baixar backup agora* (arquivo com todos os dados) e guarde no Google Drive.
 * Cada vendedor só acessa os próprios dados (testado automaticamente). Senhas são guardadas criptografadas; após 8 tentativas erradas o login é bloqueado por 15 minutos.
-* Esqueceu a senha? Outro administrador redefine em *Usuários e acessos*. Se for o único administrador: no servidor (Render → **Shell**) rode `node scripts/redefinir-senha.js email@exemplo.com NovaSenha123`.
+* Esqueceu a senha? Outro administrador redefine em *Usuários e acessos*. Se for o único: veja "Esqueceu a senha" na seção 2 (variáveis `REDEFINIR_SENHA_*`) ou, com acesso ao terminal do servidor, `node scripts/redefinir-senha.js email@exemplo.com NovaSenha123`.
 * Os arquivos enviados (PDF, XML…) ficam no servidor em `/data/uploads`.
 
 ## 7. Para quem for mexer no código
@@ -122,5 +139,5 @@ O painel **dá baixa automática** quando o Pix tem **nome e valor batendo** com
 * **Tecnologia:** Node.js 22 + Express, banco SQLite (arquivo único em `DATA_DIR/painel.db`), front-end em Preact sem etapa de build, PDF com PDFKit, leitura de PDF com pdf.js.
 * **Pastas:** `server/` (API, regras, importação, PDF), `shared/` (dinheiro, datas e nomes — usado no servidor **e** no navegador), `public/` (telas), `scripts/` (demonstração, exemplos, recuperação de senha), `tests/`.
 * **Dinheiro** é sempre guardado em **centavos** (inteiro). Datas em `AAAA-MM-DD`.
-* **Testes:** `npm test` (33 testes: segurança, isolamento entre vendedores, vendas/baixas, depósito, importação de todos os formatos, PDF).
+* **Testes:** `npm test` (41 testes: segurança, isolamento entre vendedores, vendas/baixas, depósito, importação de todos os formatos, PDF).
 * **Variáveis:** veja [`.env.example`](.env.example).
