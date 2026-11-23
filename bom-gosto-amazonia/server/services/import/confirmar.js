@@ -8,6 +8,7 @@ import {
 import { ordemAbertaDoProduto } from '../estoque.js';
 import { sugerir } from '../conciliacao.js';
 import { hojeEmpresa } from '../metrics.js';
+import { aplicarPlanilha } from './planilha-empresa.js';
 
 /**
  * @param imp   linha de `importacoes` (com dados já lidos do JSON)
@@ -15,6 +16,7 @@ import { hojeEmpresa } from '../metrics.js';
  * @param pedido { opcoes, incluir:[_linha...] | null, excluir:[...], mapa_vendedores, mapa_clientes }
  */
 export function confirmarImportacao(imp, dados, pedido, user) {
+  if (imp.tipo === 'planilha') return aplicarPlanilha(imp, dados, pedido, user); // planilhas da empresa: sincroniza (cria e atualiza)
   const opcoes = pedido.opcoes || {};
   const hoje = hojeEmpresa();
   const registros = dados.registros;
@@ -252,6 +254,8 @@ export function desfazerImportacao(id) {
     del('baixas', 'DELETE FROM baixas WHERE recebimento_id IN (SELECT id FROM recebimentos WHERE importacao_id = ?) OR titulo_id IN (SELECT id FROM titulos WHERE importacao_id = ?)', id, id);
     del('recebimentos', 'DELETE FROM recebimentos WHERE importacao_id = ?', id);
     del('titulos', 'DELETE FROM titulos WHERE importacao_id = ?', id);
+    // dívidas que vieram de OUTRA importação (ex.: lista de devedores) e foram ligadas a vendas desta: ficam, só desligadas da venda
+    db.run('UPDATE titulos SET venda_id = NULL WHERE venda_id IN (SELECT id FROM vendas WHERE importacao_id = ?)', id);
     del('vendas', 'DELETE FROM vendas WHERE importacao_id = ?', id);
     del('clientes', `DELETE FROM clientes WHERE importacao_id = ?
        AND NOT EXISTS (SELECT 1 FROM vendas v WHERE v.cliente_id = clientes.id) AND NOT EXISTS (SELECT 1 FROM titulos t WHERE t.cliente_id = clientes.id)

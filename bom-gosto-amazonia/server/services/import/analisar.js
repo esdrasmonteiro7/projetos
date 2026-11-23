@@ -6,11 +6,12 @@ import { fmtBR } from '../../../shared/dates.js';
 import { acharVendedor, ClienteIndex, ProdutoIndex } from '../entities.js';
 import { prepararTabela, converterTabela } from './tabela.js';
 import { limparHistorico } from './ofx.js';
+import { anotarPlanilha } from './planilha-empresa.js';
 
 export const TIPOS = ['vendas', 'devedores', 'pagamentos', 'estoque', 'clientes', 'produtos'];
 export const TIPOS_ROTULO = {
   vendas: 'Vendas', devedores: 'Devedores / contas a receber', pagamentos: 'Pagamentos recebidos (Pix etc.)', estoque: 'Movimentação do depósito',
-  clientes: 'Cadastro de clientes', produtos: 'Cadastro de produtos', desconhecido: 'Não identificado',
+  clientes: 'Cadastro de clientes', produtos: 'Cadastro de produtos', planilha: 'Planilha da empresa (sincronização)', desconhecido: 'Não identificado',
 };
 const LIMITE_LINHAS_GUARDADAS = 8000;
 
@@ -126,7 +127,11 @@ export function anotar(tipo, registros) {
 
     // duplicados
     let dup = null;
-    if (tipo === 'vendas' && r.chave_nfe) {
+    if (tipo === 'planilha') {
+      // tratado por anotarPlanilha (criar / atualizar / já igual), logo depois do laço
+      if (r.op === 'venda') for (const i of r.itens || []) { if (i.descricao && !pidx.find({ nome: i.descricao })) novosProdutos.add(norm(i.descricao)); }
+      if (r.op === 'estoque' && r.produto_nome && !pidx.find({ nome: r.produto_nome })) novosProdutos.add(norm(r.produto_nome));
+    } else if (tipo === 'vendas' && r.chave_nfe) {
       dup = db.get('SELECT id FROM vendas WHERE chave_nfe = ?', r.chave_nfe);
       if (dup) dup.motivo = 'Esta nota fiscal já foi importada.';
     } else if (tipo === 'vendas' && r.data) {
@@ -169,10 +174,11 @@ export function anotar(tipo, registros) {
     if (r._cliente && !r._cliente.auto) r._avisos.push(`Cliente parecido com "${r._cliente.nome}" (${Math.round(r._cliente.score * 100)}%): será criado como novo, a menos que você escolha juntar.`);
   }
 
+  const extra = tipo === 'planilha' ? anotarPlanilha(registros) : null;
   const resumo = {
     total: registros.length,
     incluidos: registros.filter((r) => r._incluir).length,
-    duplicados: registros.filter((r) => r._dup).length,
+    duplicados: extra ? extra.iguais : registros.filter((r) => r._dup).length,
     com_aviso: registros.filter((r) => r._avisos.length).length,
     clientes_novos: novosClientes.size,
     produtos_novos: novosProdutos.size,
@@ -182,6 +188,7 @@ export function anotar(tipo, registros) {
   };
   const valorDe = (r) => r.total_centavos ?? r.valor_centavos ?? 0;
   if (['vendas', 'devedores', 'pagamentos'].includes(tipo)) resumo.valor_total_centavos = registros.filter((r) => r._incluir).reduce((s, r) => s + valorDe(r), 0);
+  if (extra) Object.assign(resumo, extra);
   return resumo;
 }
 

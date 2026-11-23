@@ -15,6 +15,8 @@ import {
 import { confirmarImportacao, desfazerImportacao } from '../services/import/confirmar.js';
 import { hojeEmpresa } from '../services/metrics.js';
 import { sugerir } from '../services/conciliacao.js';
+import { lerControle, lerListaDevedores } from '../services/import/perfis-bomgosto.js';
+import { operacoesDeControle, operacoesDeDevedores } from '../services/import/planilha-empresa.js';
 
 export const router = Router();
 // só vale para /importacoes (os routers compartilham o prefixo /api)
@@ -103,7 +105,12 @@ router.post('/importacoes/analisar', upload.array('arquivos', 80), async (req, r
     criar({ nome: n === 1 ? grupos.pix.nomes[0] : `${n} comprovantes de Pix (PDF)`, tipo: 'pagamentos', formato: 'pdf', dados: { registros: grupos.pix.registros, avisos: [] } });
   }
   for (const { d, arq } of individuais) {
-    if (d.kind === 'tabela') {
+    if (d.kind === 'empresa') {
+      const controle = d.perfil === 'controle';
+      const opcoesPlano = { vendedoresExistentes: db.all('SELECT nome FROM vendedores').map((v) => v.nome) };
+      const plano = controle ? operacoesDeControle(lerControle(d.abas), opcoesPlano) : operacoesDeDevedores(lerListaDevedores(d.abas), opcoesPlano);
+      criar({ nome: `${d.nome} · ${controle ? 'vendas, depósito e produção' : 'lista de devedores'}`, tipo: 'planilha', formato: 'xlsx', arquivoId: arq.id, dados: { registros: plano.registros, produtos: plano.produtos, avisos: plano.avisos, perfil: d.perfil } });
+    } else if (d.kind === 'tabela') {
       const p = previaDeTabela(d, { hoje });
       criar({ nome: d.nome, tipo: p.tipo, formato: d.formato, arquivoId: arq.id, dados: p.dados });
     } else if (d.kind === 'ofx') {

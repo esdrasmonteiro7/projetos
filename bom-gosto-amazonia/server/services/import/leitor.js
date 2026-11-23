@@ -1,11 +1,12 @@
 // Abre qualquer arquivo enviado e devolve "documentos" prontos para a prévia.
 import path from 'node:path';
-import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { lerNFe } from './nfe.js';
 import { lerOFX } from './ofx.js';
 import { extrairPaginas, tabelaDePdf, lerComprovantePix } from './pdf.js';
 import { prepararTabela } from './tabela.js';
+import { lerXlsx } from './xlsx.js';
+import { reconhecerPlanilha } from './perfis-bomgosto.js';
 
 export function decodificar(buf) {
   if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return new TextDecoder('utf-8').decode(buf.subarray(3));
@@ -52,38 +53,14 @@ export function lerCSV(texto) {
   return linhas;
 }
 
-function valorDaCelula(v) {
-  if (v === null || v === undefined) return null;
-  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.toISOString().slice(0, 10);
-  if (typeof v === 'object') {
-    if ('result' in v) return valorDaCelula(v.result);
-    if (Array.isArray(v.richText)) return v.richText.map((r) => r.text).join('');
-    if ('text' in v) return v.text;
-    if ('error' in v) return null;
-    return String(v);
-  }
-  return v;
-}
-
 async function lerXLSX(buffer, nomeArquivo) {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer);
-  const docs = [];
-  wb.eachSheet((ws) => {
-    if (ws.state && ws.state !== 'visible') return;
-    const matriz = [];
-    const colunas = Math.min(ws.columnCount || 0, 60);
-    ws.eachRow({ includeEmpty: true }, (row, n) => {
-      if (n > 30000) return;
-      const linha = [];
-      for (let c = 1; c <= colunas; c++) linha.push(valorDaCelula(row.getCell(c).value));
-      matriz.push(linha);
-    });
-    const util = matriz.filter((l) => l.some((c) => c !== null && String(c).trim() !== ''));
-    if (util.length < 2) return;
-    docs.push({ nome: `${nomeArquivo} · aba "${ws.name}"`, formato: 'xlsx', kind: 'tabela', aba: ws.name, matriz: util });
-  });
-  return docs;
+  const abas = await lerXlsx(buffer, { formulas: true });
+  // planilhas que a própria empresa usa (Lista de Devedores / Controle): leitura própria, com atualização do que já existe
+  const perfil = reconhecerPlanilha(abas);
+  if (perfil) return [{ nome: nomeArquivo, formato: 'xlsx', kind: 'empresa', perfil, abas }];
+  return abas
+    .filter((a) => a.matriz.length >= 2)
+    .map((a) => ({ nome: `${nomeArquivo} · aba "${a.nome}"`, formato: 'xlsx', kind: 'tabela', aba: a.nome, matriz: a.matriz }));
 }
 
 /** Retorna lista de documentos: { nome, formato, kind: 'tabela'|'nfe'|'cancelamento_nfe'|'pix'|'ofx'|'erro', ... } */
