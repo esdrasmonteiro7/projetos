@@ -139,6 +139,7 @@ Na Render, troque o plano do serviço para **Starter** (a partir de ~US$ 7/mês)
 | Arquivo | O que o painel faz |
 |---|---|
 | **XML de NF-e** (pode enviar vários, ou um `.zip`) | Cria a venda com cliente, itens, valor e **parcelas/vencimentos**. Se a nota tiver "Vendedor: Nome" nas informações adicionais, já atribui ao vendedor. Notas canceladas (XML de evento) cancelam a venda. |
+| **Planilhas da empresa: "Lista de Devedores" e "Controle"** (.xlsx) | Reconhecidas sozinhas. A **Lista de Devedores** (uma aba por mês: SACADOS, NFE, ENTRADA, VENCIMENTO, VENDEDOR, VALOR, BOLETO, SITUAÇÃO…) vira dívidas, com o que está pago, vencido, em aberto ou baixado. O **Controle** (blocos de vendas por vendedor + abas DEPÓSITO e PRODUÇÃO) vira vendas com itens e parcelas, retiradas dos vendedores e produção. **Sincroniza**: ao enviar a planilha atualizada de novo, o painel reconhece cada nota/boleto, atualiza o que mudou (ex.: parcela que passou a paga) e **não duplica nada** — a ordem de envio não importa e dá para desfazer. |
 | **Planilha Excel (.xlsx)** | Cada **aba** é lida separadamente e o tipo é identificado (devedores, vendas, depósito, clientes, produtos). Entende "Sim/Não" em *Pago*, datas, valores com vírgula. |
 | **CSV** do Excel brasileiro | Separador `;` e acentos (Windows-1252) são reconhecidos automaticamente. |
 | **PDF de relatório** (com texto) | Lê como tabela (colunas, linhas, totais ignorados, seções "Vendedor: …"). |
@@ -148,6 +149,8 @@ Na Render, troque o plano do serviço para **Starter** (a partir de ~US$ 7/mês)
 **Sempre há uma prévia.** Você confere os dados, ajusta (tipo de dado, colunas, vendedor de cada nome, clientes parecidos) e só então confirma. Linhas repetidas vêm desmarcadas. Depois de importar é possível **desfazer**.
 
 O painel **dá baixa automática** quando o Pix tem **nome e valor batendo** com uma dívida do mesmo cliente. Os demais ficam em *Recebimentos → A conciliar* com sugestões.
+
+**Planilhas da empresa — o que vale saber:** a nota é reconhecida pelo número ("0793-01" = nota 793, parcela 1); vendedores escritos de jeitos diferentes (PETERSON/PETERSSON) viram um só; a entrada do depósito igual a uma produção do mesmo dia não conta em dobro; o painel **nunca "despaga"** uma dívida — se corrigir um pagamento na planilha, ajuste no painel. O estoque inicial não está na planilha: lance um ajuste de entrada com o que havia no começo do mês.
 
 **Limites conhecidos:** PDF que é foto/escaneado (sem texto) não pode ser lido; planilha antiga `.xls` precisa ser salva como `.xlsx`; cada banco desenha o comprovante de um jeito — se algum não for lido direito, a prévia deixa você preencher o que faltar, e basta enviar um exemplo para a leitura ser ajustada.
 
@@ -174,5 +177,5 @@ O painel **dá baixa automática** quando o Pix tem **nome e valor batendo** com
 * **Tecnologia:** Node.js 22 + Express, banco SQLite (arquivo único em `DATA_DIR/painel.db`; na Netlify, guardado no Blobs), front-end em Preact sem etapa de build, PDF com PDFKit, leitura de PDF com pdf.js.
 * **Pastas:** `server/` (API, regras, importação, PDF), `shared/` (dinheiro, datas e nomes — usado no servidor **e** no navegador), `public/` (telas), `server/serverless/` (modo Netlify: persistência no Blobs e ponte com o Express), `netlify/functions/` (a função), `scripts/` (demonstração, exemplos, recuperação de senha, build e suporte da Netlify), `tests/`.
 * **Dinheiro** é sempre guardado em **centavos** (inteiro). Datas em `AAAA-MM-DD`.
-* **Testes:** `npm test` (66 testes: segurança, isolamento entre vendedores, vendas/baixas, depósito, importação de todos os formatos, PDF e o modo Netlify — gravação no Blobs, conflito entre dois acessos, falha de rede, cópia diária).
+* **Testes:** `npm test` (83 testes: segurança, isolamento entre vendedores, vendas/baixas, depósito, importação de todos os formatos, PDF e o modo Netlify — gravação no Blobs, conflito entre dois acessos, falha de rede, cópia diária).
 * **Variáveis:** veja [`.env.example`](.env.example).
