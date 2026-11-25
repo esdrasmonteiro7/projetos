@@ -6,15 +6,13 @@
 html,body{width:1080px;height:1920px;background:#0b0705;overflow:hidden}
 .c{position:relative;width:1080px;height:1920px;overflow:hidden;font-family:'Montserrat',sans-serif;
   background:linear-gradient(180deg,#0b0705 0%,#130c07 55%,#1c120a 80%,#120b06 100%)}
-/* fundo: balcão do bar do Recanto, desfocado, em duotone dourado (como os balões do modelo) */
 .bg{position:absolute;left:0;top:0;width:1080px;height:1400px;background:url(bg_duotone.jpg) center top/cover;opacity:.85}
 .bgfade{position:absolute;left:0;top:0;width:1080px;height:1420px;
   background:linear-gradient(180deg,rgba(8,5,3,.55) 0%,rgba(8,5,3,.15) 25%,rgba(10,6,4,.25) 55%,rgba(16,10,6,.92) 82%,#160e08 100%)}
 .glow{position:absolute;inset:0;background:
   radial-gradient(700px 520px at 78% 88%,rgba(196,128,44,.22),transparent 70%),
   radial-gradient(600px 400px at 50% 100%,rgba(150,95,30,.18),transparent 70%)}
-.grain{position:absolute;inset:0;opacity:.22;mix-blend-mode:overlay}
-.dstar{position:absolute;fill:#3a240d;opacity:.55}
+.grain{position:absolute;inset:0;opacity:.22;mix-blend-mode:overlay;pointer-events:none}
 
 .logo{position:absolute;top:66px;left:50%;transform:translateX(-50%);width:270px;
   filter:drop-shadow(0 6px 16px rgba(0,0,0,.75))}
@@ -26,10 +24,22 @@ html,body{width:1080px;height:1920px;background:#0b0705;overflow:hidden}
 .card img{position:absolute;left:50%;top:-58px;height:118%;transform:translateX(-50%)}
 .card .shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,rgba(14,9,5,.55) 82%,rgba(14,9,5,.9) 100%)}
 
-.star{position:absolute;filter:drop-shadow(0 20px 22px rgba(0,0,0,.55))}
+/* estrelas 3D (PNG renderizado) */
+.s3d{position:absolute;filter:drop-shadow(0 26px 24px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(230,170,60,.18))}
+.sbg{position:absolute;filter:blur(3px) brightness(.8) drop-shadow(0 10px 12px rgba(0,0,0,.5));opacity:.9}
+.sfg{position:absolute;filter:blur(22px);opacity:.85}
 
-.script{position:absolute;left:-10px;right:-10px;top:975px;text-align:center;white-space:nowrap;
-  font-family:'Yellowtail',cursive;font-size:330px;line-height:1;letter-spacing:-4px;
+/* brilhos */
+.spk{position:absolute;width:var(--s);height:var(--s);transform:translate(-50%,-50%);mix-blend-mode:screen}
+.spk:before,.spk:after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  background:radial-gradient(closest-side,#fffbe9,rgba(255,226,150,.85) 30%,rgba(255,200,90,0))}
+.spk:before{width:100%;height:9%;border-radius:50%}
+.spk:after{width:9%;height:100%;border-radius:50%}
+.spk i{position:absolute;inset:30%;border-radius:50%;background:radial-gradient(closest-side,#fff,rgba(255,220,140,.6) 40%,transparent)}
+.dust{position:absolute;border-radius:50%;background:radial-gradient(circle,#ffe9a8,rgba(230,170,60,.5) 45%,transparent 70%)}
+
+.script{position:absolute;top:975px;left:0;white-space:nowrap;
+  font-family:'Yellowtail',cursive;font-size:330px;line-height:1;
   background:linear-gradient(180deg,#fff4cc 10%,#f4d27c 38%,#c9922f 62%,#f6da8a 80%,#a8741f 100%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 5px 0 rgba(45,26,7,.85)) drop-shadow(0 14px 22px rgba(0,0,0,.6))}
@@ -44,52 +54,36 @@ html,body{width:1080px;height:1920px;background:#0b0705;overflow:hidden}
   background:linear-gradient(180deg,#fbe6a8,#e2b85a 55%,#c7952f);box-shadow:0 10px 26px rgba(0,0,0,.45)}
 .pill .em{height:44px}
 .pill .wm{height:24px}
-.pill .ic{display:flex;gap:8px;margin-left:6px}
-.pill .ic svg{width:24px;height:24px}
+.pill svg{width:24px;height:24px;margin-left:6px}
 .pill span{font-weight:600;font-size:21px;letter-spacing:3px;color:#1e1208}
-
-.blob{position:absolute;filter:blur(26px);opacity:.9}
 </style></head>
 <body><div class="c">
   <div class="bg"></div>
   <div class="bgfade"></div>
   <div class="glow"></div>
 
-  <svg width="0" height="0" style="position:absolute">
-    <defs>
-      <path id="p5" d="M50 4 L61.8 36.2 L96 38.2 L69.2 59.4 L78.4 92.6 L50 73.4 L21.6 92.6 L30.8 59.4 L4 38.2 L38.2 36.2Z"/>
-      <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#fff3c0"/><stop offset=".22" stop-color="#f0c45c"/>
-        <stop offset=".5" stop-color="#b0761f"/><stop offset=".75" stop-color="#eebc58"/><stop offset="1" stop-color="#6e420f"/>
-      </linearGradient>
-      <radialGradient id="hl" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fffbe6" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
-      <symbol id="star" viewBox="0 0 200 200">
-        <path d="M100 8 C108 8 112 50 124 66 C138 80 188 74 192 82 C196 92 152 118 148 136 C144 154 166 192 158 196 C148 200 116 170 100 170 C84 170 52 200 42 196 C34 192 56 154 52 136 C48 118 4 92 8 82 C12 74 62 80 76 66 C88 50 92 8 100 8Z" fill="url(#g1)"/>
-        <path d="M100 8 C92 8 88 50 76 66 C62 80 12 74 8 82 C30 86 70 88 86 76 C96 66 98 30 100 8Z" fill="#fff6d0" opacity=".5"/>
-        <path d="M100 170 C116 170 148 200 158 196 C150 186 130 160 100 150Z" fill="#5a3409" opacity=".35"/>
-        <path d="M100 26 L100 150 M26 84 L100 120 L174 84 M56 184 L100 120 L144 184" stroke="#6e420f" stroke-opacity=".22" stroke-width="3" fill="none"/>
-        <ellipse cx="80" cy="76" rx="28" ry="15" fill="url(#hl)" transform="rotate(-32 80 76)"/>
-        <ellipse cx="150" cy="96" rx="12" ry="6" fill="url(#hl)" opacity=".7" transform="rotate(10 150 96)"/>
-      </symbol>
-    </defs>
-  </svg>
+  <!-- estrelas 3D pequenas ao fundo (profundidade) -->
+  <img class="sbg" src="star_s1.png" style="left:845px;top:150px;width:120px;transform:rotate(12deg)">
+  <img class="sbg" src="star_s2.png" style="left:80px;top:150px;width:90px;transform:rotate(-18deg);filter:blur(5px) brightness(.7)">
+  <img class="sbg" src="star_s2.png" style="left:975px;top:560px;width:78px;transform:rotate(-10deg);filter:blur(4px) brightness(.7)">
 
-  <!-- estrelinhas de fundo (como no modelo) -->
-  <svg class="dstar" style="left:190px;top:70px;width:44px;height:44px;transform:rotate(-12deg)"><use href="#p5"/></svg>
-  <svg class="dstar" style="left:830px;top:160px;width:56px;height:56px;transform:rotate(15deg)"><use href="#p5"/></svg>
-  <svg class="dstar" style="left:950px;top:330px;width:38px;height:38px"><use href="#p5"/></svg>
-  <svg class="dstar" style="left:60px;top:250px;width:30px;height:30px;transform:rotate(20deg)"><use href="#p5"/></svg>
-  <svg class="dstar" style="left:970px;top:600px;width:42px;height:42px;transform:rotate(-8deg)"><use href="#p5"/></svg>
+  <!-- pó dourado -->
+  <div class="dust" style="left:250px;top:95px;width:16px;height:16px"></div>
+  <div class="dust" style="left:760px;top:250px;width:12px;height:12px"></div>
+  <div class="dust" style="left:60px;top:780px;width:14px;height:14px"></div>
+  <div class="dust" style="left:1010px;top:1290px;width:12px;height:12px"></div>
+  <div class="dust" style="left:95px;top:1420px;width:10px;height:10px"></div>
+  <div class="dust" style="left:980px;top:1500px;width:16px;height:16px"></div>
 
   <img class="logo" src="logo.png">
 
   <div class="card"><div class="in"><img src="foto.jpg"><div class="shade"></div></div></div>
 
-  <!-- balões estrela dourados nas mesmas posições do modelo -->
-  <svg class="star" style="left:-38px;top:318px;width:380px;height:380px;transform:rotate(-14deg)"><use href="#star"/></svg>
-  <svg class="star" style="left:770px;top:790px;width:330px;height:330px;transform:rotate(16deg)"><use href="#star"/></svg>
+  <!-- balões estrela 3D nas posições do modelo -->
+  <img class="s3d" src="star_right.png" style="left:772px;top:770px;width:330px">
+  <img class="s3d" src="star_left.png" style="left:-60px;top:300px;width:410px">
 
-  <div class="script">Parabéns</div>
+  <div class="script" id="script">Parabéns</div>
 
   <div class="sub"><b>Parabéns</b> pelo<br>seu aniversário!</div>
   <div class="name">Gleicivan Oliveira</div>
@@ -98,14 +92,36 @@ html,body{width:1080px;height:1920px;background:#0b0705;overflow:hidden}
   <div class="pill">
     <img class="em" src="emblem_dark.png">
     <img class="wm" src="wordmark_dark.png">
-    <div class="ic">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#1e1208" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.3" cy="6.7" r="1.1" fill="#1e1208" stroke="none"/></svg>
-    </div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="#1e1208" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.3" cy="6.7" r="1.1" fill="#1e1208" stroke="none"/></svg>
     <span>/ @RECANTODOGUERREIRO_PARRILLA</span>
   </div>
 
-  <!-- balão desfocado em primeiro plano (como a mancha laranja do modelo) -->
-  <svg class="star blob" style="left:-150px;top:1560px;width:520px;height:520px;transform:rotate(24deg)"><use href="#star"/></svg>
+  <!-- brilhos nos balões e no texto -->
+  <div class="spk" style="--s:120px;left:120px;top:400px"><i></i></div>
+  <div class="spk" style="--s:90px;left:905px;top:830px"><i></i></div>
+  <div class="spk" style="--s:70px;left:300px;top:1090px"><i></i></div>
+  <div class="spk" style="--s:56px;left:900px;top:205px"><i></i></div>
+
+  <!-- balão desfocado em primeiro plano (como no modelo) -->
+  <img class="sfg" src="star_left.png" style="left:-170px;top:1570px;width:540px;transform:rotate(22deg)">
 
   <svg class="grain" width="1080" height="1920"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 1.3 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
-</div></body></html>
+</div>
+<script>
+// centraliza o "Parabéns" pela tinta real das letras (fontes script têm laterais irregulares)
+window.centerScript = async () => {
+  await document.fonts.ready;
+  const el = document.getElementById('script');
+  const ctx = document.createElement('canvas').getContext('2d');
+  const target = 960;               // largura máxima da palavra
+  let fs = 330;
+  ctx.font = fs + 'px Yellowtail';
+  let m = ctx.measureText('Parabéns');
+  let ink = m.actualBoundingBoxLeft + m.actualBoundingBoxRight;
+  if (ink > target) { fs = Math.floor(fs * target / ink); ctx.font = fs + 'px Yellowtail'; m = ctx.measureText('Parabéns'); ink = m.actualBoundingBoxLeft + m.actualBoundingBoxRight; }
+  el.style.fontSize = fs + 'px';
+  el.style.left = ((1080 - ink) / 2 + m.actualBoundingBoxLeft) + 'px';
+  return {fs, ink, left: el.style.left};
+};
+</script>
+</body></html>
