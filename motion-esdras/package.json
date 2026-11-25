@@ -1,0 +1,10 @@
+{
+  "name": "motion-esdras-solucoes",
+  "private": true,
+  "type": "module",
+  "description": "Motion 9:16 Esdras Soluções — cena 3D em Three.js renderizada quadro a quadro",
+  "dependencies": {
+    "three": "0.170.0",
+    "playwright": "*"
+  }
+}
