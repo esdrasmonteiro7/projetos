@@ -8,6 +8,7 @@ const FPS = 60, TOTAL = 1980, SEG = 165, NSEG = Math.ceil(TOTAL / SEG);
 const dir = 'segs2';
 const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const p = await b.newPage({ viewport: { width: 1080, height: 1920 } });
+p.setDefaultTimeout(0);
 p.on('pageerror', (e) => console.log(`[w${id}] pageerror:`, e.message));
 await p.goto('http://127.0.0.1:8765/index.html');
 await p.waitForFunction('window.ready === true', null, { timeout: 300000 });

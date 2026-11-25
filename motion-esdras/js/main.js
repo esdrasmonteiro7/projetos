@@ -76,7 +76,7 @@ bgDome.frustumCulled = false; bgDome.renderOrder = -10;
 scene.add(bgDome);
 
 // ---------------------------------------------------------------- dust particles
-const dustU = { uTime: { value: 0 }, uScale: { value: 1 }, uBoost: { value: 0 } };
+const dustU = { uTime: { value: 0 }, uScale: { value: 1 }, uBoost: { value: 0 }, uFade: { value: 1 } };
 {
   const N = 9000, r = U.rng(3);
   const pos = new Float32Array(N * 3), sz = new Float32Array(N), ph = new Float32Array(N);
@@ -99,9 +99,9 @@ const dustU = { uTime: { value: 0 }, uScale: { value: 1 }, uBoost: { value: 0 } 
         gl_Position = projectionMatrix*mv;
         float tw = 0.55+0.45*sin(uTime*1.9+phase*7.);
         vA = tw * smoothstep(0.25,2.5,-mv.z) * (1.0 - smoothstep(26.,55.,-mv.z)); }`,
-    fragmentShader: `varying float vA; uniform float uBoost;
+    fragmentShader: `varying float vA; uniform float uBoost; uniform float uFade;
       void main(){ vec2 c=gl_PointCoord-0.5; float d=length(c); float a=smoothstep(0.5,0.0,d); a*=a;
-        gl_FragColor = vec4(vec3(0.55,0.75,1.0)*(0.9+uBoost*2.0), a*vA*0.85); }`,
+        gl_FragColor = vec4(vec3(0.55,0.75,1.0)*(0.9+uBoost*2.0), a*vA*0.85*uFade); }`,
   });
   const pts = new THREE.Points(g, m); pts.frustumCulled = false; scene.add(pts);
 }
@@ -887,8 +887,10 @@ function subframes(t) {
   return { m, n: Math.max(objFast, Math.min(10, Math.ceil(m.px / 2.8))) };
 }
 window.__subframes = (t) => subframes(t).n;
+window.__px = (t) => subframes(t).m.px;
 function renderFrame(t, frameIndex = 0) {
   const { m, n } = subframes(t);
+  dustU.uFade.value = 1 - 0.92 * smooth(prog(m.px, 35, 110));
   const prevAuto = renderer.autoClear;
   renderer.autoClear = false;
   renderer.setRenderTarget(accRT); renderer.setClearColor(0x000000, 1); renderer.clear(true, false, false);
@@ -903,7 +905,7 @@ function renderFrame(t, frameIndex = 0) {
   renderer.autoClear = prevAuto;
   if (n > 1) setState(t);
   // residual directional blur fills the gaps between sub-frames
-  const dir = m.dir.clone().multiplyScalar(1 / n);
+  const dir = m.dir.clone().multiplyScalar(1.6 / n);
   if (dir.length() > 0.05) dir.setLength(0.05);
   const rad = clamp(m.rad / n, -0.08, 0.08);
   blurPass.uniforms.uDir.value.copy(dir.length() > 0.0012 ? dir : dir.set(0, 0));
