@@ -45,7 +45,7 @@ export default function Vendas({ usuario }) {
             { t: 'Total', num: true, r: (v) => html`<b>${fmtBRL(v.total_centavos)}</b>` },
             { t: 'Pagamento', r: (v) => FORMAS[v.forma_pagamento] || '—' },
             { t: 'Situação', r: (v) => html`<${Badge} tipo=${SIT[v.situacao][0]}>${SIT[v.situacao][1]}<//>` },
-            { t: 'Origem', r: (v) => html`<span class="muted small">${{ manual: 'Lançada à mão', xml: 'Nota fiscal', xlsx: 'Planilha', csv: 'Planilha', pdf: 'PDF' }[v.origem] || v.origem}</span>`, cls: 'hide-m' },
+            { t: 'Origem', r: (v) => html`<span class="muted small">${{ manual: 'Lançada à mão', xml: 'Nota fiscal', xlsx: 'Planilha', csv: 'Planilha', planilha: 'Planilha da empresa', pdf: 'Relatório' }[v.origem] || v.origem}</span>`, cls: 'hide-m' },
           ]} /></div>
         <${Pager} pagina=${pagina} limite=${50} total=${data.total} onPage=${setPagina} />`}
     </div>

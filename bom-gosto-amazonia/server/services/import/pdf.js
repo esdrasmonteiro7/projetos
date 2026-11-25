@@ -20,9 +20,15 @@ export async function extrairPaginas(buffer) {
   for (let p = 1; p <= total; p++) {
     const page = await doc.getPage(p);
     const tc = await page.getTextContent();
+    // posições como o leitor VÊ a página (relatórios impressos "deitados" vêm com a página girada em 90°; sem isto as colunas viram linhas)
+    const [m0, m1, m2, m3, m4, m5] = page.getViewport({ scale: 1 }).transform;
+    const altura = page.getViewport({ scale: 1 }).height;
     const itens = tc.items
       .filter((i) => typeof i.str === 'string' && i.str.trim() !== '')
-      .map((i) => ({ str: i.str, x: i.transform[4], y: i.transform[5], w: i.width || 0, h: Math.abs(i.transform[3]) || i.height || 10 }));
+      .map((i) => {
+        const [, , c0, d0, e0, f0] = i.transform;
+        return { str: i.str, x: m0 * e0 + m2 * f0 + m4, y: altura - (m1 * e0 + m3 * f0 + m5), w: i.width || 0, h: Math.hypot(c0, d0) || i.height || 10 };
+      });
     paginas.push({ numero: p, itens, linhas: montarLinhas(itens) });
   }
   await tarefa.destroy();

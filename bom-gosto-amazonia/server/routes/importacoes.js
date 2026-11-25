@@ -6,17 +6,13 @@ import { config } from '../config.js';
 import { requireAdmin, audit } from '../auth.js';
 import { bad, notFound, int } from '../lib/http.js';
 import { fmtBR } from '../../shared/dates.js';
-import { salvarArquivo, abrirArquivo, enviarArquivo } from '../services/arquivos.js';
-import { lerArquivo } from '../services/import/leitor.js';
+import { abrirArquivo, enviarArquivo } from '../services/arquivos.js';
+import { analisarArquivos, salvarPrevia } from '../services/import/previas.js';
 import { PAPEIS_ROTULO } from '../services/import/tabela.js';
-import {
-  TIPOS, TIPOS_ROTULO, anotar, previaDeTabela, reprocessarTabela, registrosDeNFe, registrosDePix, registrosDeOFX, empresaAtual,
-} from '../services/import/analisar.js';
-import { confirmarImportacao, desfazerImportacao } from '../services/import/confirmar.js';
+import { TIPOS, TIPOS_ROTULO, anotar, reprocessarTabela } from '../services/import/analisar.js';
+import { confirmarImportacao, desfazerImportacao, finalizarImportacao } from '../services/import/confirmar.js';
 import { hojeEmpresa } from '../services/metrics.js';
 import { sugerir } from '../services/conciliacao.js';
-import { lerControle, lerListaDevedores } from '../services/import/perfis-bomgosto.js';
-import { operacoesDeControle, operacoesDeDevedores } from '../services/import/planilha-empresa.js';
 
 export const router = Router();
 // só vale para /importacoes (os routers compartilham o prefixo /api)
@@ -36,14 +32,6 @@ function carregar(id) {
 }
 const lerDados = (imp) => (imp.dados_json ? JSON.parse(imp.dados_json) : null);
 
-function salvarPrevia(imp, tipo, dados) {
-  dados.registros.forEach((r, i) => { r._id = i; });
-  const resumo = anotar(tipo, dados.registros);
-  dados.resumo_atual = resumo;
-  db.run('UPDATE importacoes SET tipo = ?, dados_json = ?, resumo_json = ? WHERE id = ?', tipo, JSON.stringify(dados), JSON.stringify(resumo), imp);
-  return resumo;
-}
-
 /** Versão enxuta para enviar ao navegador (sem a tabela inteira). */
 function paraNavegador(imp) {
   const dados = lerDados(imp);
@@ -59,68 +47,9 @@ function paraNavegador(imp) {
 
 router.post('/importacoes/analisar', upload.array('arquivos', 80), async (req, res) => {
   if (!req.files?.length) throw bad('Escolha pelo menos um arquivo.');
-  const hoje = hojeEmpresa();
-  const empresa = empresaAtual();
-  const grupos = { nfe: { registros: [], nomes: [] }, pix: { registros: [], nomes: [], arquivos: new Set() } };
-  const individuais = [];
-  const erros = [];
-  const repetidos = [];
-
-  for (const f of req.files) {
-    const nome = nomeUtf8(f.originalname);
-    const arq = salvarArquivo({ buffer: f.buffer, nome, mime: f.mimetype, user_id: req.user.id });
-    const rep = db.get(
-      "SELECT i.confirmado_em FROM importacoes i JOIN arquivos a ON a.id = i.arquivo_id WHERE a.hash = ? AND i.status = 'confirmada' LIMIT 1", arq.hash,
-    );
-    if (rep) repetidos.push(`${nome} (já importado em ${fmtBR(String(rep.confirmado_em).slice(0, 10))})`);
-    const docs = await lerArquivo({ buffer: f.buffer, nome });
-    for (const d of docs) {
-      if (d.kind === 'erro') { erros.push({ nome: d.nome, motivo: d.motivo }); continue; }
-      if (d.kind === 'nfe') {
-        grupos.nfe.registros.push(registrosDeNFe(d.nfe, { _arquivo_id: arq.id, _linha: grupos.nfe.registros.length + 1, _arquivo_nome: d.nome }));
-        grupos.nfe.nomes.push(d.nome);
-      } else if (d.kind === 'cancelamento_nfe') {
-        grupos.nfe.registros.push({ tipo_registro: 'cancelamento', chave: d.nfe.chave, _linha: grupos.nfe.registros.length + 1, _arquivo_id: arq.id, _avisos: [`Cancelamento da NF-e ${d.nfe.chave.slice(-9)}${d.nfe.motivo ? ` — ${d.nfe.motivo}` : ''}`], data: null });
-        grupos.nfe.nomes.push(d.nome);
-      } else if (d.kind === 'pix') {
-        grupos.pix.registros.push(...registrosDePix(d.recibos, empresa, { _arquivo_id: arq.id, _arquivo_nome: d.nome }));
-        grupos.pix.nomes.push(d.nome);
-      } else individuais.push({ d, arq });
-    }
-  }
-
-  const criadas = [];
-  const criar = ({ nome, tipo, formato, arquivoId, dados }) => {
-    const id = db.run('INSERT INTO importacoes (arquivo_id, nome, tipo, formato, status, criado_por) VALUES (?,?,?,?,?,?)', arquivoId || null, nome, tipo, formato, 'previa', req.user.id).id;
-    const resumo = salvarPrevia(id, tipo, dados);
-    criadas.push({ id, nome, tipo, formato, resumo, avisos: dados.avisos?.slice(0, 5) || [] });
-  };
-
-  if (grupos.nfe.registros.length) {
-    const n = grupos.nfe.registros.length;
-    criar({ nome: n === 1 ? grupos.nfe.nomes[0] : `${n} notas fiscais (XML)`, tipo: 'vendas', formato: 'xml', dados: { registros: grupos.nfe.registros, avisos: [] } });
-  }
-  if (grupos.pix.registros.length) {
-    const n = grupos.pix.registros.length;
-    criar({ nome: n === 1 ? grupos.pix.nomes[0] : `${n} comprovantes de Pix (PDF)`, tipo: 'pagamentos', formato: 'pdf', dados: { registros: grupos.pix.registros, avisos: [] } });
-  }
-  for (const { d, arq } of individuais) {
-    if (d.kind === 'empresa') {
-      const controle = d.perfil === 'controle';
-      const opcoesPlano = { vendedoresExistentes: db.all('SELECT nome FROM vendedores').map((v) => v.nome) };
-      const plano = controle ? operacoesDeControle(lerControle(d.abas), opcoesPlano) : operacoesDeDevedores(lerListaDevedores(d.abas), opcoesPlano);
-      criar({ nome: `${d.nome} · ${controle ? 'vendas, depósito e produção' : 'lista de devedores'}`, tipo: 'planilha', formato: 'xlsx', arquivoId: arq.id, dados: { registros: plano.registros, produtos: plano.produtos, avisos: plano.avisos, perfil: d.perfil } });
-    } else if (d.kind === 'tabela') {
-      const p = previaDeTabela(d, { hoje });
-      criar({ nome: d.nome, tipo: p.tipo, formato: d.formato, arquivoId: arq.id, dados: p.dados });
-    } else if (d.kind === 'ofx') {
-      const registros = registrosDeOFX(d.ofx);
-      criar({ nome: d.nome, tipo: 'pagamentos', formato: 'ofx', arquivoId: arq.id, dados: { registros, avisos: registros.length ? [] : ['Nenhuma entrada (crédito) encontrada neste extrato.'] } });
-    }
-  }
-  if (repetidos.length) for (const c of criadas) c.avisos.unshift(`Atenção: arquivo(s) já importado(s) antes: ${repetidos.join('; ')}`);
-  audit(req, 'Enviou arquivos para importação', 'importacao', null, { arquivos: req.files.length, previas: criadas.length });
-  res.json({ importacoes: criadas, erros, repetidos });
+  const r = await analisarArquivos(req.files.map((f) => ({ buffer: f.buffer, nome: nomeUtf8(f.originalname), mime: f.mimetype })), req.user.id);
+  audit(req, 'Enviou arquivos para importação', 'importacao', null, { arquivos: req.files.length, previas: r.importacoes.length });
+  res.json(r);
 });
 
 router.get('/importacoes', (_req, res) => {
@@ -180,10 +109,10 @@ router.post('/importacoes/:id/confirmar', (req, res) => {
   if (imp.status !== 'previa') throw bad('Esta importação já foi finalizada.');
   const dados = lerDados(imp);
   if (!dados) throw bad('A prévia expirou. Envie o arquivo de novo.');
-  const resultado = confirmarImportacao(imp, dados, req.body || {}, req.user);
-  const resumo = { ...(imp.resumo_json ? JSON.parse(imp.resumo_json) : {}), resultado };
-  // depois de confirmada, a prévia (pesada) não é mais necessária: guarda só o resumo e o que foi criado
-  db.run("UPDATE importacoes SET status = 'confirmada', confirmado_em = strftime('%Y-%m-%dT%H:%M:%fZ','now'), resumo_json = ?, dados_json = NULL WHERE id = ?", JSON.stringify(resumo), id);
+  // "Importar tudo" não escolhe linha por linha: vale o que está certo AGORA (os arquivos enviados juntos são confirmados um depois do outro)
+  if (imp.tipo === 'planilha' && !Array.isArray(req.body?.incluir)) anotar('planilha', dados.registros);
+  // depois de confirmada, a prévia (pesada) não é mais necessária: guarda só o resumo, o que foi criado e como estava o que foi alterado
+  const resultado = finalizarImportacao(imp, imp.resumo_json ? JSON.parse(imp.resumo_json) : {}, confirmarImportacao(imp, dados, req.body || {}, req.user));
   audit(req, 'Confirmou importação', 'importacao', id, resultado.criados);
   let sobra = null;
   if (imp.tipo === 'pagamentos') {

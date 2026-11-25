@@ -245,11 +245,43 @@ export function confirmarImportacao(imp, dados, pedido, user) {
   return resultado;
 }
 
-/** Remove tudo que a importação criou. */
+/** Marca a importação como confirmada, guardando o resumo e (à parte) como estavam as coisas que ela alterou. Devolve o resultado "limpo". */
+export function finalizarImportacao(imp, resumoAtual, resultado) {
+  const { alteracoes = [], ...limpo } = resultado;
+  db.run(
+    "UPDATE importacoes SET status = 'confirmada', confirmado_em = strftime('%Y-%m-%dT%H:%M:%fZ','now'), resumo_json = ?, desfazer_json = ?, dados_json = NULL WHERE id = ?",
+    JSON.stringify({ ...resumoAtual, resultado: limpo }), alteracoes.length ? JSON.stringify(alteracoes) : null, imp.id,
+  );
+  return limpo;
+}
+
+const COLUNAS_RESTAURAVEIS = {
+  titulos: ['venda_id', 'cliente_id', 'vendedor_id', 'documento', 'parcela', 'emissao', 'vencimento', 'valor_centavos', 'cancelado', 'observacoes'],
+  vendas: ['numero', 'data', 'cliente_id', 'vendedor_id', 'total_centavos', 'chave_nfe', 'observacoes'],
+  clientes: ['documento', 'telefone', 'email', 'endereco', 'cidade', 'vendedor_id'],
+};
+function restaurarAlteracoes(imp) {
+  if (!imp?.desfazer_json) return 0;
+  let n = 0;
+  for (const reg of JSON.parse(imp.desfazer_json).reverse()) {
+    const cols = COLUNAS_RESTAURAVEIS[reg.tabela];
+    if (!cols) continue;
+    db.run(`UPDATE ${reg.tabela} SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`, ...cols.map((c) => reg.antes[c] ?? null), reg.id);
+    if (reg.tabela === 'vendas' && reg.itens) {
+      db.run('DELETE FROM venda_itens WHERE venda_id = ?', reg.id);
+      for (const i of reg.itens) db.run('INSERT INTO venda_itens (venda_id, produto_id, descricao, quantidade, unidade, preco_centavos, total_centavos) VALUES (?,?,?,?,?,?,?)', reg.id, i.produto_id, i.descricao, i.quantidade, i.unidade, i.preco_centavos, i.total_centavos);
+    }
+    n++;
+  }
+  return n;
+}
+
+/** Remove tudo que a importação criou e devolve ao que era antes o que ela alterou (dívidas ajustadas, vendas completadas...). */
 export function desfazerImportacao(id) {
   return db.tx(() => {
     const cont = {};
     const del = (nome, sql, ...p) => { cont[nome] = db.run(sql, ...p).changes; };
+    cont.restauradas = restaurarAlteracoes(db.get('SELECT desfazer_json FROM importacoes WHERE id = ?', id));
     del('movimentos', 'DELETE FROM estoque_movimentos WHERE importacao_id = ?', id);
     del('baixas', 'DELETE FROM baixas WHERE recebimento_id IN (SELECT id FROM recebimentos WHERE importacao_id = ?) OR titulo_id IN (SELECT id FROM titulos WHERE importacao_id = ?)', id, id);
     del('recebimentos', 'DELETE FROM recebimentos WHERE importacao_id = ?', id);

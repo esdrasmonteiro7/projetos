@@ -38,7 +38,7 @@ test('notas fiscais XML: cliente, itens, parcelas e vendedor vêm da nota', asyn
   const r = await analisar('nfe-001-mercadinho-souza.xml', 'nfe-002-padaria-pao-de-ouro.xml', 'nfe-003-restaurante-pix.xml');
   assert.equal(r.importacoes.length, 1, 'várias notas viram UMA importação');
   const p = r.importacoes[0];
-  assert.equal(p.tipo, 'vendas');
+  assert.equal(p.tipo, 'planilha', 'notas fiscais usam a sincronização: reconhecem o que já existe pelo número da nota');
   assert.equal(p.resumo.total, 3);
   assert.deepEqual(p.resumo.vendedores.map((v) => v.nome).sort(), ['Ana Paula Souza', 'Carlos Monteiro', 'Marcos Lima']);
   assert.ok(p.resumo.vendedores.every((v) => v.sugestao), 'todos os vendedores reconhecidos');
@@ -69,10 +69,10 @@ test('notas fiscais XML: cliente, itens, parcelas e vendedor vêm da nota', asyn
 test('mandar as mesmas notas de novo não duplica nada', async () => {
   const r = await analisar('nfe-001-mercadinho-souza.xml', 'nfe-002-padaria-pao-de-ouro.xml');
   const p = r.importacoes[0];
-  assert.equal(p.resumo.duplicados, 2);
+  assert.equal(p.resumo.duplicados, 2, 'as duas notas já estão no painel, iguais');
   assert.equal(p.resumo.incluidos, 0);
   const det = await detalhe(p.id);
-  assert.match(det.dados.registros[0]._avisos.join(' '), /nota fiscal já foi importada/i);
+  assert.match(det.dados.registros[0]._avisos.join(' '), /já está igual/i);
   ok(await admin.post(`/api/importacoes/${p.id}/descartar`));
 });
 
@@ -240,9 +240,10 @@ test('XML de cancelamento da nota cancela a venda e suas parcelas', async () => 
   assert.ok(antes && antes.situacao !== 'cancelada', 'a venda da NF-e 1501 existe (importada no teste anterior)');
   const r = await analisar('nfe-cancelamento-1501.xml');
   const p = r.importacoes[0];
-  assert.equal(p.tipo, 'vendas');
+  assert.equal(p.tipo, 'planilha');
   const det = await detalhe(p.id);
-  assert.equal(det.dados.registros[0].tipo_registro, 'cancelamento');
+  assert.equal(det.dados.registros[0].op, 'cancelar');
+  assert.equal(det.dados.registros[0]._acao, 'atualizar', 'a venda está no painel: será cancelada');
   const res = await confirmar(p.id);
   assert.equal(res.resultado.criados.canceladas, 1);
   const depois = (await contar('/api/vendas?mes=2026-11&limite=50&status=todas')).itens.find((v) => v.numero === '1501');

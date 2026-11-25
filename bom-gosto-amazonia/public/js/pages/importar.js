@@ -7,7 +7,7 @@ import {
   PageHead, Btn, Tabela, Empty, Modal, Field, Input, Select, Check, Tabs, Icon, ErroCaixa, Spinner, Badge,
 } from '../ui.js';
 
-const TIPO_ROT = { vendas: 'Vendas', devedores: 'Devedores / a receber', pagamentos: 'Pagamentos (Pix etc.)', estoque: 'Depósito', clientes: 'Clientes', produtos: 'Produtos', planilha: 'Planilha da empresa', desconhecido: 'Não identificado' };
+const TIPO_ROT = { vendas: 'Vendas', devedores: 'Devedores / a receber', pagamentos: 'Pagamentos (Pix etc.)', estoque: 'Depósito', clientes: 'Clientes', produtos: 'Produtos', planilha: 'Arquivos da empresa', desconhecido: 'Não identificado' };
 const TIPO_COR = { vendas: 'ok', devedores: 'warn', pagamentos: 'violet', estoque: 'info', clientes: 'mute', produtos: 'mute', planilha: 'info', desconhecido: 'bad' };
 const ACEITA = '.pdf,.xml,.xlsx,.xlsm,.csv,.tsv,.txt,.ofx,.zip';
 
@@ -126,11 +126,12 @@ async function desfazer(h, reload) {
 
 function CartaoPrevia({ p, feito, onRevisar }) {
   const r = p.resumo;
-  return html`<div class="card pad"><div class="row between" style="align-items:flex-start">
-    <div class="grow"><div class="row gap-s"><${Badge} tipo=${TIPO_COR[p.tipo]}>${TIPO_ROT[p.tipo]}<//><b style="font-size:16px">${p.nome}</b></div>
+  return html`<div class="card pad"><div class="row between" style="align-items:flex-start;flex-wrap:wrap">
+    <div class="grow" style="min-width:min(100%,260px)"><div class="row gap-s" style="flex-wrap:wrap"><${Badge} tipo=${TIPO_COR[p.tipo]}>${TIPO_ROT[p.tipo]}<//><b style="font-size:16px;overflow-wrap:anywhere">${p.nome}</b></div>
       <div class="chips" style="margin-top:10px"><span class="chip"><b>${r.total}</b> linhas</span><span class="chip"><b>${r.incluidos}</b> serão importadas</span>
         ${r.atualizar > 0 && html`<span class="chip" style="background:var(--blue-bg, #e8f1fc)"><b>${r.atualizar}</b> serão atualizadas</span>`}
         ${r.duplicados > 0 && html`<span class="chip" style="background:var(--amber-bg)"><b>${r.duplicados}</b> ${p.tipo === 'planilha' ? 'já estão iguais' : 'repetidas'}</span>`}
+        ${r.conferir > 0 && html`<span class="chip" style="background:var(--amber-bg)"><b>${r.conferir}</b> para conferir</span>`}
         ${r.clientes_novos > 0 && html`<span class="chip"><b>${r.clientes_novos}</b> clientes novos</span>`}
         ${r.valor_total_centavos > 0 && html`<span class="chip">Total <b>${fmtBRL(r.valor_total_centavos)}</b></span>`}
         ${r.vendedores.length > 0 && html`<span class="chip">Vendedores: <b>${r.vendedores.map((v) => v.nome).slice(0, 3).join(', ')}${r.vendedores.length > 3 ? '…' : ''}</b></span>`}</div>
@@ -211,7 +212,7 @@ function Revisao({ id, onClose, onConfirmado }) {
     rodape=${html`<${Btn} tipo="danger" onClick=${descartar}>Descartar<//><div class="grow"></div><${Btn} onClick=${onClose}>Fechar (continuar depois)<//>
       <${Btn} tipo="primary" icon="check" disabled=${trabalhando || nMarcados === 0 || importacao.tipo === 'desconhecido'} onClick=${confirmarImport}>${trabalhando ? 'Aguarde…' : `Importar ${nMarcados} ${nMarcados === 1 ? 'linha' : 'linhas'}`}<//>`}>
     <div class="stack">
-      <div class="chips"><span class="chip"><b>${nMarcados}</b> marcadas</span>${resumo.criar > 0 && html`<span class="chip"><b>${resumo.criar}</b> novas</span>`}${resumo.atualizar > 0 && html`<span class="chip"><b>${resumo.atualizar}</b> atualizações</span>`}${resumo.duplicados > 0 && html`<span class="chip" style="background:var(--amber-bg)"><b>${resumo.duplicados}</b> ${importacao.tipo === 'planilha' ? 'já estão iguais no painel (desmarcadas)' : 'repetidas (desmarcadas)'}</span>`}
+      <div class="chips"><span class="chip"><b>${nMarcados}</b> marcadas</span>${resumo.criar > 0 && html`<span class="chip"><b>${resumo.criar}</b> novas</span>`}${resumo.atualizar > 0 && html`<span class="chip"><b>${resumo.atualizar}</b> atualizações</span>`}${resumo.duplicados > 0 && html`<span class="chip" style="background:var(--amber-bg)"><b>${resumo.duplicados}</b> ${importacao.tipo === 'planilha' ? 'já estão iguais no painel (desmarcadas)' : 'repetidas (desmarcadas)'}</span>`}${resumo.conferir > 0 && html`<span class="chip" style="background:var(--amber-bg)"><b>${resumo.conferir}</b> para conferir (desmarcadas)</span>`}
         ${resumo.clientes_novos > 0 && html`<span class="chip"><b>${resumo.clientes_novos}</b> clientes novos</span>`}${resumo.produtos_novos > 0 && html`<span class="chip"><b>${resumo.produtos_novos}</b> produtos novos</span>`}
         ${resumo.valor_total_centavos > 0 && html`<span class="chip">Total <b>${fmtBRL(resumo.valor_total_centavos)}</b></span>`}</div>
       ${dados.avisos?.length > 0 && html`<div class="alert warn"><${Icon} n="alert" /><div class="small">${dados.avisos.slice(0, 6).map((a) => html`<div>${a}</div>`)}${dados.avisos.length > 6 ? html`<div>…e mais ${dados.avisos.length - 6} avisos</div>` : ''}</div></div>`}
@@ -235,7 +236,7 @@ function Revisao({ id, onClose, onConfirmado }) {
           ${importacao.tipo === 'vendas' && html`<${Check} checked=${opc.considerar_pagas_sem_info} onChange=${setO('considerar_pagas_sem_info')}>Vendas sem informação de pagamento: considerar já recebidas<//>`}
           ${importacao.tipo === 'vendas' && html`<${Check} checked=${opc.baixar_estoque} onChange=${setO('baixar_estoque')}>Dar saída dos produtos no depósito<//>`}
           ${importacao.tipo === 'pagamentos' && html`<${Check} checked=${opc.conciliar_automatico} onChange=${setO('conciliar_automatico')}>Dar baixa automática quando nome e valor batem com uma dívida<//>`}</div></div></div>`}
-      ${importacao.tipo === 'planilha' && html`<div class="alert info"><${Icon} n="zap" /><div class="small"><b>Sincronização:</b> o que já está no painel é reconhecido pela nota fiscal/boleto. Linhas novas são criadas; dívidas que a planilha mostra como pagas (ou com outro vencimento) são atualizadas; o que já está igual fica de fora. Nada é duplicado, e dá para desfazer depois.</div></div>`}
+      ${importacao.tipo === 'planilha' && html`<div class="alert info"><${Icon} n="zap" /><div class="small"><b>Sincronização:</b> o que já está no painel é reconhecido pelo número da nota fiscal e do boleto. Linhas novas são criadas; notas já lançadas são completadas (chave, CNPJ do cliente, itens, parcelas, vendedor); dívidas que o arquivo mostra como pagas são baixadas; o que já está igual fica de fora. Notas canceladas nunca entram. Nada é duplicado, e dá para desfazer o que foi criado.</div></div>`}
 
       ${vendedoresPrecisam && html`<div class="card pad"><div class="card-t">Vendedores encontrados no arquivo</div><div class="card-s" style="margin-bottom:10px">Confirme a quem pertence cada nome. Os dados são separados por vendedor.</div>
         <div class="stack" style="gap:8px">${resumo.vendedores.map((v) => html`<div class="row" key=${v.nome} style="border:1px solid var(--line);border-radius:12px;padding:8px 12px"><div class="grow"><b>${v.nome}</b> <span class="muted small">· ${v.qtd} ${v.qtd === 1 ? 'linha' : 'linhas'}</span></div>
@@ -276,15 +277,16 @@ function colunasPrevia(tipo, { marcados, toggle, editarRegistro }) {
   if (tipo === 'clientes') return [chk, { t: 'Nome', r: (r) => html`<b>${r.nome}</b>` }, { t: 'CPF/CNPJ', r: (r) => r.documento || '—' }, { t: 'Telefone', r: (r) => r.telefone || '—' }, { t: 'Cidade', r: (r) => r.cidade || '—' }, { t: 'Vendedor', r: (r) => html`<${Vend} r=${r} />` }, avisos];
   if (tipo === 'produtos') return [chk, { t: 'Produto', r: (r) => html`<b>${r.nome}</b>` }, { t: 'Código', r: (r) => r.sku || '—' }, { t: 'Un.', r: (r) => r.unidade }, { t: 'Preço', num: true, r: (r) => fmtBRL(r.preco_centavos) }, avisos];
   if (tipo === 'planilha') {
-    const acao = { criar: ['ok', 'Criar'], atualizar: ['info', 'Atualizar'], igual: ['mute', 'Já igual'] };
-    const oque = (r) => (r.op === 'venda' ? 'Venda' : r.op === 'boleto' ? 'Boleto' : TIPOS_MOV[r.tipo] || r.tipo);
+    const acao = { criar: ['ok', 'Criar'], atualizar: ['info', 'Atualizar'], igual: ['mute', 'Já igual'], conferir: ['warn', 'Conferir'] };
+    const oque = (r) => (r.op === 'venda' ? 'Venda' : r.op === 'boleto' ? 'Boleto' : r.op === 'cancelar' ? 'Nota cancelada' : TIPOS_MOV[r.tipo] || r.tipo);
     const situ = (r) => {
+      if (r.op === 'cancelar') return 'não entra';
       if (r.op === 'venda') { const pagas = r.parcelas.filter((p) => p.pago).length; return `${r.parcelas.length > 1 ? `${r.parcelas.length} parcelas` : '1 parcela'} · ${pagas === r.parcelas.length ? 'paga' : pagas ? `${pagas} paga(s)` : 'em aberto'}`; }
       if (r.op === 'boleto') return { pago: 'paga', aberto: 'em aberto', cancelado: 'baixada/cancelada' }[r.situacao] || r.situacao;
       return r.vendedor_nome ? '' : '—';
     };
     return [chk, { t: 'Ação', r: (r) => html`<${Badge} tipo=${acao[r._acao]?.[0] || 'mute'}>${acao[r._acao]?.[1] || r._acao}<//>` }, { t: 'O quê', r: oque },
-      { t: 'Data', r: (r) => fmtBR(r.data || r.vencimento) }, { t: 'Nota / produto', r: (r) => (r.op === 'estoque' ? html`<b>${r.produto_nome}</b>${r._produto ? '' : html`<span class="sub-l" style="color:var(--blue)">produto novo</span>`}` : r.numero || r.documento || '—') },
+      { t: 'Data', r: (r) => fmtBR(r.data || r.vencimento) }, { t: 'Nota / produto', r: (r) => (r.op === 'estoque' ? html`<b>${r.produto_nome}</b>${r._produto ? '' : html`<span class="sub-l" style="color:var(--blue)">produto novo</span>`}` : r.numero || r.documento || (r.op === 'venda' ? html`<span class="muted">sem nota</span>` : '—')) },
       { t: 'Cliente', r: (r) => (r.cliente ? html`<${Cli} r=${r} c=${r.cliente} />` : html`<span class="muted">—</span>`) }, { t: 'Vendedor', r: (r) => html`<${Vend} r=${r} />` },
       { t: 'Valor / caixas', num: true, r: (r) => (r.op === 'estoque' ? `${fmtQtd(r.quantidade)} cx` : html`<b>${fmtBRL(r.total_centavos ?? r.valor_centavos)}</b>`) }, { t: 'Situação', r: situ }, avisos];
   }

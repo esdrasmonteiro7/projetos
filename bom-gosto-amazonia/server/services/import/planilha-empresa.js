@@ -16,12 +16,10 @@ import { ClienteIndex, ProdutoIndex, acharVendedor, criarCliente, criarVendedor,
 import { registrarRecebimento, registrarBaixa, SINAL_ESTOQUE } from '../finance.js';
 import { ordemAbertaDoProduto } from '../estoque.js';
 import { canonizarVendedores, datasNoTexto } from './perfis-bomgosto.js';
+import { numeroNorm, docNorm, docBase, docTemParcela, escolher, mudancasDoTitulo, criarDiarioDeAlteracoes } from './sync-comum.js';
+import { estadoDeVendas, anotarNota, aplicarNota, acharProdutoDaNota } from './notas-sync.js';
 
-// ------------------------------------------------------------------ chaves de comparação
-/** "0793" → "793" */
-export const numeroNorm = (n) => String(n ?? '').trim().replace(/^0+(?=\d)/, '');
-/** "0793-01" / "793-1" → "793-01" ; "821" → "821" */
-export const docNorm = (d) => String(d ?? '').trim().toUpperCase().replace(/\s+/g, '').replace(/^0+(?=\d)/, '').replace(/-0*(\d+)$/, (_, n) => `-${String(n).padStart(2, '0')}`);
+export { numeroNorm, docNorm };
 
 const formaDoTexto = (t, padrao = 'boleto') => {
   const s = norm(t);
@@ -169,12 +167,7 @@ export function operacoesDeControle(ctl, { vendedoresExistentes = [] } = {}) {
 
 // ================================================================== 2) pré-visualização (o que seria feito)
 function estado() {
-  const vendas = new Map();
-  for (const v of db.all("SELECT id, numero, cliente_id FROM vendas WHERE status = 'ativa' AND numero IS NOT NULL")) {
-    const k = numeroNorm(v.numero);
-    if (!vendas.has(k)) vendas.set(k, []);
-    vendas.get(k).push(v);
-  }
+  const sv = estadoDeVendas();
   const titulos = new Map();
   for (const t of db.all('SELECT id, venda_id, cliente_id, documento, vencimento, valor_centavos, cancelado, pago_centavos FROM v_titulos WHERE documento IS NOT NULL')) {
     const k = docNorm(t.documento);
@@ -186,25 +179,57 @@ function estado() {
     const k = `${m.data}|${m.produto_id}|${m.tipo}|${m.vendedor_id || 0}|${Math.abs(m.quantidade)}`;
     movimentos.set(k, (movimentos.get(k) || 0) + 1);
   }
-  return { vendas, titulos, movimentos };
+  return { vendas: sv.porNumero, porNumero: sv.porNumero, porChave: sv.porChave, semNumero: sv.semNumero, titulos, movimentos };
 }
 
-/** Acha a dívida certa entre as de mesmo documento. Cancelada só conta quando a planilha também a mostra como cancelada. */
-const escolher = (lista, clienteId, incluirCancelados = false) => {
-  const l = (lista || []).filter((t) => incluirCancelados || !t.cancelado);
-  return l.find((t) => clienteId && t.cliente_id === clienteId) || l[0] || null;
-};
-
-/** O que mudaria numa dívida/parcela existente `t` se aplicássemos "alvo" (situação vinda da planilha). */
-function mudancasDoTitulo(t, alvo) {
-  const m = [];
-  const aberto = t.valor_centavos - (t.pago_centavos || 0);
-  if (alvo.situacao === 'pago' && aberto > 0) m.push({ tipo: 'pagar', texto: `marcar como paga em ${fmtBR(alvo.data_pagamento)}` });
-  if (alvo.situacao === 'cancelado' && !t.cancelado && !(t.pago_centavos > 0)) m.push({ tipo: 'cancelar', texto: 'cancelar (baixa a pedido do cedente)' });
-  if (t.cancelado) return m; // dívida já cancelada no painel: nada mais a mudar
-  if (alvo.situacao === 'aberto' && aberto > 0 && alvo.vencimento && alvo.vencimento !== t.vencimento) m.push({ tipo: 'vencimento', texto: `vencimento ${fmtBR(t.vencimento)} → ${fmtBR(alvo.vencimento)}` });
-  return m;
+/** Quanto falta para a venda ter dívidas somando o total dela (o que ainda cabe criar sem duplicar). */
+function folgaDaVenda(venda) {
+  const soma = db.get('SELECT COALESCE(SUM(valor_centavos), 0) AS s FROM titulos WHERE venda_id = ? AND cancelado = 0', venda.id).s;
+  return venda.total_centavos - soma;
 }
+
+/**
+ * O boleto não existe com este documento, mas a NOTA dele já está no painel com outra divisão de parcelas (ex.: a lista diz "851"
+ * de R$ 19.200 e o painel tem "851-01" e "851-02" de R$ 9.600)? Criar de novo duplicaria a dívida: devolve o motivo para não criar.
+ */
+function motivoDeNaoCriarBoleto(r, est) {
+  const base = docBase(r.documento);
+  const venda = (est.porNumero.get(base) || [])[0];
+  if (venda) {
+    const atuais = db.all('SELECT documento, valor_centavos FROM titulos WHERE venda_id = ? AND cancelado = 0', venda.id);
+    if (r.valor_centavos > folgaDaVenda(venda)) return `A NF ${base} já está no painel com ${atuais.length === 1 ? 'a dívida' : 'as dívidas'} ${atuais.map((t) => t.documento || '—').join(', ')} (${fmtBRL(atuais.reduce((a, t) => a + t.valor_centavos, 0))} de ${fmtBRL(venda.total_centavos)}): o boleto ${r.documento} não foi criado de novo para não duplicar a dívida.`;
+    return null;
+  }
+  const outros = db.all('SELECT documento FROM titulos WHERE venda_id IS NULL AND cancelado = 0 AND documento IS NOT NULL').filter((t) => docBase(t.documento) === base && docTemParcela(t.documento) !== docTemParcela(r.documento));
+  if (outros.length) return `A NF ${base} já tem dívida no painel com outra divisão de parcelas (${outros.map((t) => t.documento).join(', ')}): o boleto ${r.documento} não foi criado de novo para não duplicar.`;
+  return null;
+}
+
+/**
+ * Relatório de VENCIDOS do banco: dívidas que o painel tem em aberto, vencidas no período do relatório, e que o banco NÃO lista
+ * (provavelmente já foram pagas — ou nunca foram boleto). Só avisa: quem decide se está paga é a pessoa.
+ */
+export function avisosDoBanco(rel) {
+  if (!rel.periodo?.de || !/vencid/i.test(rel.consulta || '')) return [];
+  const doBanco = new Set(rel.linhas.map((l) => docNorm(l.seu_numero)));
+  const mesmaDivida = new Set(rel.linhas.map((l) => `${docBase(l.seu_numero)}|${l.valor_centavos}|${l.vencimento}`)); // "818" na lista × "0818-01" no banco
+  const faltam = db.all(
+    `SELECT t.documento, t.vencimento, t.valor_centavos - t.pago_centavos AS aberto, c.nome FROM v_titulos t LEFT JOIN clientes c ON c.id = t.cliente_id
+     WHERE t.cancelado = 0 AND t.valor_centavos - t.pago_centavos > 0 AND t.vencimento >= ? AND t.vencimento <= ? ORDER BY t.vencimento, t.id`, rel.periodo.de, rel.periodo.ate,
+  ).filter((t) => !doBanco.has(docNorm(t.documento)) && !mesmaDivida.has(`${docBase(t.documento)}|${t.aberto}|${t.vencimento}`));
+  if (!faltam.length) return [];
+  const lista = faltam.slice(0, 12).map((t) => `${t.documento || 'sem nº'} ${t.nome || ''} ${fmtBRL(t.aberto)}`.replace(/\s+/g, ' ').trim()).join('; ');
+  return [`${faltam.length} ${faltam.length === 1 ? 'dívida em aberto' : 'dívidas em aberto'} no painel, com vencimento entre ${fmtBR(rel.periodo.de)} e ${fmtBR(rel.periodo.ate)}, NÃO ${faltam.length === 1 ? 'aparece' : 'aparecem'} na lista de vencidos do banco (talvez já ${faltam.length === 1 ? 'tenha sido paga' : 'tenham sido pagas'}, ou não ${faltam.length === 1 ? 'seja' : 'sejam'} boleto): ${lista}${faltam.length > 12 ? '…' : ''}. Confira e dê baixa se for o caso.`];
+}
+
+/** A mesma dívida escrita de outro jeito: mesma nota, mesmo valor e mesmo vencimento ("818" na lista × "0818-01" no banco). */
+function tituloEquivalente(r) {
+  const base = docBase(r.documento);
+  return db.all('SELECT * FROM v_titulos WHERE cancelado = 0 AND documento IS NOT NULL AND valor_centavos = ? AND vencimento = ?', r.valor_centavos, r.vencimento).find((t) => docBase(t.documento) === base) || null;
+}
+
+/** Boleto do banco: guarda o "nosso número" nas observações da dívida (uma vez só). */
+const nossoNumeroNovo = (t, r) => (r.nosso_numero && !String(t.observacoes || '').includes(r.nosso_numero) ? `Boleto Sicoob nº ${r.nosso_numero}` : null);
 
 /**
  * Marca cada operação com a ação ('criar' | 'atualizar' | 'igual') e os avisos. Chamada a cada vez que a prévia é salva.
@@ -217,16 +242,27 @@ export function anotarPlanilha(registros) {
   let criar = 0;
   let atualizar = 0;
   let iguais = 0;
+  let conferir = 0;
   for (const r of registros) {
     r._acao = 'igual';
     r._mudancas = [];
-    if (r.op === 'boleto') {
-      const t = escolher(est.titulos.get(docNorm(r.documento)), r._cliente?.id, r.situacao === 'cancelado');
-      if (!t) { r._acao = 'criar'; }
-      else {
+    if (r.op === 'cancelar' || (r.op === 'venda' && (r.fonte === 'nfe' || r.fonte === 'relatorio'))) {
+      const a = anotarNota(r, est, pidx);
+      r._acao = a.acao;
+      r._mudancas = a.mudancas;
+      r._avisos.push(...a.avisos);
+    } else if (r.op === 'boleto') {
+      const t = escolher(est.titulos.get(docNorm(r.documento)), r._cliente?.id, r.situacao === 'cancelado') || (r.situacao === 'aberto' ? tituloEquivalente(r) : null);
+      if (!t) {
+        const motivo = r.situacao === 'aberto' ? motivoDeNaoCriarBoleto(r, est) : null;
+        if (motivo) { r._acao = 'conferir'; r._avisos.push(motivo); } else r._acao = 'criar';
+      } else {
         r._mudancas = mudancasDoTitulo(t, r);
+        if (r.fonte === 'banco' && nossoNumeroNovo(db.get('SELECT observacoes FROM titulos WHERE id = ?', t.id), r)) r._mudancas.push({ tipo: 'nosso_numero', texto: `guardar o nº do boleto no banco (${r.nosso_numero})` });
         r._acao = r._mudancas.length ? 'atualizar' : 'igual';
-        if (t.valor_centavos !== r.valor_centavos && r.situacao === 'aberto') r._avisos.push(`O valor na planilha (${fmtBRL(r.valor_centavos)}) é diferente do já cadastrado (${fmtBRL(t.valor_centavos)}); o valor cadastrado foi mantido.`);
+        if (t.valor_centavos !== r.valor_centavos && r.situacao === 'aberto') r._avisos.push(`O valor no arquivo (${fmtBRL(r.valor_centavos)}) é diferente do já cadastrado (${fmtBRL(t.valor_centavos)}); o valor cadastrado foi mantido.`);
+        if (r.fonte === 'banco' && r.situacao === 'aberto' && !t.cancelado && t.valor_centavos - t.pago_centavos <= 0) r._avisos.push('O banco ainda lista este boleto como vencido, mas no painel ele consta como PAGO. Se o cliente pagou por fora do boleto, falta dar a baixa no banco; se não, confira no painel.');
+        if (r.fonte === 'banco' && t.cancelado) r._avisos.push('O banco lista este boleto, mas no painel ele está cancelado.');
       }
     } else if (r.op === 'venda') {
       const vs = est.vendas.get(numeroNorm(r.numero));
@@ -239,7 +275,11 @@ export function anotarPlanilha(registros) {
       } else {
         for (const p of r.parcelas) {
           const t = escolher((est.titulos.get(docNorm(p.documento)) || []).filter((x) => x.venda_id === ex.id || !x.venda_id), r._cliente?.id);
-          if (!t) { r._mudancas.push({ tipo: 'parcela_nova', texto: `parcela ${p.documento} não existia` }); continue; }
+          if (!t) {
+            if (p.valor_centavos > folgaDaVenda(ex)) r._avisos.push(`A parcela ${p.documento} (${fmtBRL(p.valor_centavos)}) não foi criada: esta nota já tem dívidas que somam o total dela (talvez dividida de outro jeito).`);
+            else r._mudancas.push({ tipo: 'parcela_nova', texto: `parcela ${p.documento} não existia` });
+            continue;
+          }
           r._mudancas.push(...mudancasDoTitulo(t, { situacao: p.pago ? 'pago' : 'aberto', data_pagamento: p.data_pagamento, vencimento: p.vencimento }).map((m) => ({ ...m, texto: `${p.documento}: ${m.texto}` })));
         }
         r._acao = r._mudancas.length ? 'atualizar' : 'igual';
@@ -256,12 +296,12 @@ export function anotarPlanilha(registros) {
       } else r._acao = 'criar';
     }
     if (r._mudancas.length) r._avisos.push(`Atualiza: ${r._mudancas.map((m) => m.texto).join('; ')}`);
-    r._incluir = r._incluir_forcado !== undefined ? r._incluir_forcado : r._acao !== 'igual';
+    r._incluir = r._incluir_forcado !== undefined ? r._incluir_forcado : !r._nao_incluir && r._acao !== 'igual' && r._acao !== 'conferir';
     if (r._acao === 'igual') r._avisos.push('Já está igual no painel.');
-    if (r._acao === 'criar') criar++; else if (r._acao === 'atualizar') atualizar++; else iguais++;
+    if (r._acao === 'criar') criar++; else if (r._acao === 'atualizar') atualizar++; else if (r._acao === 'conferir') conferir++; else iguais++;
   }
   const valorDe = (r) => (r.op === 'venda' ? r.total_centavos : r.op === 'boleto' ? r.valor_centavos : 0);
-  return { criar, atualizar, iguais, valor_total_centavos: registros.filter((r) => r._incluir).reduce((s, r) => s + valorDe(r), 0) };
+  return { criar, atualizar, iguais, conferir, valor_total_centavos: registros.filter((r) => r._incluir).reduce((s, r) => s + valorDe(r), 0) };
 }
 
 // ================================================================== 3) aplicar no banco
@@ -292,6 +332,7 @@ export function aplicarPlanilha(imp, dados, pedido, user) {
   const incluirEsc = pedido.incluir ? new Set(pedido.incluir.map(String)) : null;
   const resultado = { criados: { vendas: 0, titulos: 0, recebimentos: 0, clientes: 0, produtos: 0, vendedores: 0, movimentos: 0, baixas_automaticas: 0, canceladas: 0, atualizados: 0 }, ignoradas: [], erros: [] };
   const ctx = { imp, user, resultado };
+  const guardar = criarDiarioDeAlteracoes(resultado); // como estavam as coisas que esta importação altera (para o "Desfazer")
   const mapaV = pedido.mapa_vendedores || {};
   const mapaC = pedido.mapa_clientes || {};
   const contados = new Map(); // movimentos iguais já tratados nesta importação
@@ -341,7 +382,7 @@ export function aplicarPlanilha(imp, dados, pedido, user) {
     `INSERT INTO titulos (venda_id, cliente_id, vendedor_id, documento, parcela, descricao, emissao, vencimento, valor_centavos, cancelado, origem, observacoes, importacao_id, criado_por)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     d.venda_id || null, d.cliente_id || null, d.vendedor_id || null, d.documento, d.parcela || null, d.descricao || null, d.emissao || null, d.vencimento,
-    d.valor_centavos, d.cancelado ? 1 : 0, 'planilha', d.observacoes || null, imp.id, user.id,
+    d.valor_centavos, d.cancelado ? 1 : 0, d.origem || 'planilha', d.observacoes || null, imp.id, user.id,
   ).id;
   const achar = (documento, clienteId, soDaVenda = null, incluirCancelados = false) => {
     const lista = (est.titulos.get(docNorm(documento)) || []).map((t) => recarregarTitulo(t.id)).filter(Boolean).filter((t) => soDaVenda === null || t.venda_id === soDaVenda || !t.venda_id);
@@ -352,13 +393,40 @@ export function aplicarPlanilha(imp, dados, pedido, user) {
     const ms = mudancasDoTitulo(recarregarTitulo(t.id), alvo);
     for (const m of ms) {
       if (m.tipo === 'pagar') { if (pagarTitulo(t, { data: alvo.data_pagamento || alvo.vencimento, forma: alvo.forma }, ctx)) mexeu = true; }
-      else if (m.tipo === 'cancelar') { db.run('UPDATE titulos SET cancelado = 1 WHERE id = ?', t.id); resultado.criados.canceladas++; mexeu = true; }
-      else if (m.tipo === 'vencimento') { db.run('UPDATE titulos SET vencimento = ? WHERE id = ?', alvo.vencimento, t.id); mexeu = true; }
+      else if (m.tipo === 'cancelar') { guardar('titulos', t.id); db.run('UPDATE titulos SET cancelado = 1 WHERE id = ?', t.id); resultado.criados.canceladas++; mexeu = true; }
+      else if (m.tipo === 'vencimento') { guardar('titulos', t.id); db.run('UPDATE titulos SET vencimento = ? WHERE id = ?', alvo.vencimento, t.id); mexeu = true; }
     }
     return mexeu;
   };
 
+  // notas fiscais (XML) e relatório de vendas: cada um tem o seu jeito de reconhecer o que já existe (notas-sync.js)
+  const clienteDaNota = (c, vend, { cortado = false } = {}) => {
+    if (!c?.nome) return null;
+    if (cortado) { // o relatório corta o nome na coluna: vale um cliente cujo nome COMEÇA assim, se houver um só
+      const k = norm(c.nome);
+      const cands = db.all('SELECT id, vendedor_id, nome_norm FROM clientes WHERE ativo = 1').filter((x) => x.nome_norm.startsWith(k));
+      if (cands.length === 1) return { id: cands[0].id, vendedor_id: cands[0].vendedor_id };
+    }
+    return cliente(c, vend);
+  };
+  const produtoDaNota = (i) => {
+    const p = acharProdutoDaNota(i, pidx);
+    if (p) {
+      if (i.codigo && !p.sku && !pidx.find({ sku: i.codigo })) { // guarda o código de barras: as próximas notas casam por ele
+        db.run('UPDATE produtos SET sku = ? WHERE id = ?', String(i.codigo), p.id);
+        pidx.add({ ...p, sku: String(i.codigo) });
+      }
+      return p.id;
+    }
+    const id = criarProduto({ nome: i.descricao, sku: i.codigo || null, unidade: i.unidade || 'cx', preco_centavos: i.preco_centavos || 0, importacao_id: imp.id });
+    pidx.add({ id, nome: i.descricao, nome_norm: norm(i.descricao), sku: i.codigo || null, unidade: i.unidade || 'cx' });
+    resultado.criados.produtos++;
+    return id;
+  };
+  const ctxNotas = { imp, user, resultado, est, pidx, vendedorId, guardar, cliente: clienteDaNota, produto: produtoDaNota, novoTitulo, pagarTitulo: (t, a) => pagarTitulo(t, a, ctx) };
+
   function processar(r) {
+    if (r.op === 'cancelar' || (r.op === 'venda' && (r.fonte === 'nfe' || r.fonte === 'relatorio'))) { aplicarNota(r, ctxNotas); return; }
     const vend = vendedorId(r.vendedor_nome);
     if (r.op === 'estoque') {
       const pid = produto(r.produto_nome);
@@ -376,13 +444,21 @@ export function aplicarPlanilha(imp, dados, pedido, user) {
       return;
     }
 
-    const cli = cliente(r.cliente, vend);
     if (r.op === 'boleto') {
-      const t = achar(r.documento, cli?.id, null, r.situacao === 'cancelado');
-      if (t) { if (aplicarMudancas(t, r)) resultado.criados.atualizados++; return; }
+      const f = r.cliente?.nome ? cidx.find(r.cliente) : null; // só procura: o cliente só é cadastrado se o boleto for novo
+      const t = achar(r.documento, f && (f.tipo !== 'parecido' || f.score >= 0.93) ? f.cliente.id : null, null, r.situacao === 'cancelado') || (r.situacao === 'aberto' ? tituloEquivalente(r) : null);
+      if (t) {
+        let mexeu = aplicarMudancas(t, r);
+        const nota = r.fonte === 'banco' ? nossoNumeroNovo(db.get('SELECT observacoes FROM titulos WHERE id = ?', t.id), r) : null;
+        if (nota) { guardar('titulos', t.id); db.run("UPDATE titulos SET observacoes = CASE WHEN COALESCE(observacoes, '') = '' THEN ? ELSE observacoes || ' · ' || ? END WHERE id = ?", nota, nota, t.id); mexeu = true; }
+        if (mexeu) resultado.criados.atualizados++;
+        return;
+      }
+      if (r.situacao === 'aberto' && motivoDeNaoCriarBoleto(r, est)) return; // a nota já está no painel com outra divisão de parcelas
+      const cli = cliente(r.cliente, vend);
       const id = novoTitulo({
         cliente_id: cli?.id, vendedor_id: vend || cli?.vendedor_id, documento: r.documento, emissao: r.emissao, vencimento: r.vencimento, valor_centavos: r.valor_centavos,
-        cancelado: r.situacao === 'cancelado', descricao: 'Boleto da lista de devedores', observacoes: r.observacoes,
+        cancelado: r.situacao === 'cancelado', descricao: r.fonte === 'banco' ? 'Boleto do banco (Sicoob)' : 'Boleto da lista de devedores', observacoes: r.observacoes, origem: r.fonte === 'banco' ? 'pdf' : 'planilha',
       });
       resultado.criados.titulos++;
       if (r.situacao === 'pago') pagarTitulo({ id }, { data: r.data_pagamento, forma: r.forma, pagador_nome: r.cliente.nome }, ctx);
@@ -390,6 +466,7 @@ export function aplicarPlanilha(imp, dados, pedido, user) {
     }
 
     if (r.op === 'venda') {
+      const cli = cliente(r.cliente, vend);
       const vs = est.vendas.get(numeroNorm(r.numero)) || [];
       const ex = vs.find((v) => !cli || v.cliente_id === cli.id) || vs[0];
       if (ex) {
@@ -397,6 +474,7 @@ export function aplicarPlanilha(imp, dados, pedido, user) {
         for (const p of r.parcelas) {
           const t = achar(p.documento, cli?.id, ex.id);
           if (!t) {
+            if (p.valor_centavos > folgaDaVenda(ex)) continue; // a nota já tem dívidas somando o total (talvez divididas de outro jeito): não duplica
             const id = novoTitulo({ venda_id: ex.id, cliente_id: cli?.id, vendedor_id: vend, documento: p.documento, parcela: null, emissao: r.data, vencimento: p.vencimento, valor_centavos: p.valor_centavos });
             resultado.criados.titulos++; mexeu = true;
             if (p.pago) pagarTitulo({ id }, { data: p.data_pagamento, forma: p.forma, pagador_nome: r.cliente.nome }, ctx);
@@ -422,6 +500,7 @@ export function aplicarPlanilha(imp, dados, pedido, user) {
         const adotavel = achar(p.documento, cli?.id, null);
         let tid;
         if (adotavel && !adotavel.venda_id) {
+          guardar('titulos', adotavel.id);
           db.run('UPDATE titulos SET venda_id = ?, parcela = COALESCE(parcela, ?), cliente_id = COALESCE(cliente_id, ?), vendedor_id = COALESCE(vendedor_id, ?), emissao = COALESCE(emissao, ?) WHERE id = ?', vendaId, parcela, cli?.id || null, vend || null, r.data, adotavel.id);
           tid = adotavel.id;
         } else {

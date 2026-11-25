@@ -7,11 +7,12 @@ import { acharVendedor, ClienteIndex, ProdutoIndex } from '../entities.js';
 import { prepararTabela, converterTabela } from './tabela.js';
 import { limparHistorico } from './ofx.js';
 import { anotarPlanilha } from './planilha-empresa.js';
+import { acharProdutoDaNota } from './notas-sync.js';
 
 export const TIPOS = ['vendas', 'devedores', 'pagamentos', 'estoque', 'clientes', 'produtos'];
 export const TIPOS_ROTULO = {
   vendas: 'Vendas', devedores: 'Devedores / contas a receber', pagamentos: 'Pagamentos recebidos (Pix etc.)', estoque: 'Movimentação do depósito',
-  clientes: 'Cadastro de clientes', produtos: 'Cadastro de produtos', planilha: 'Planilha da empresa (sincronização)', desconhecido: 'Não identificado',
+  clientes: 'Cadastro de clientes', produtos: 'Cadastro de produtos', planilha: 'Arquivos da empresa (sincronização)', desconhecido: 'Não identificado',
 };
 const LIMITE_LINHAS_GUARDADAS = 8000;
 
@@ -129,7 +130,7 @@ export function anotar(tipo, registros) {
     let dup = null;
     if (tipo === 'planilha') {
       // tratado por anotarPlanilha (criar / atualizar / já igual), logo depois do laço
-      if (r.op === 'venda') for (const i of r.itens || []) { if (i.descricao && !pidx.find({ nome: i.descricao })) novosProdutos.add(norm(i.descricao)); }
+      if (r.op === 'venda') for (const i of r.itens || []) { if (i.descricao && !(i.codigo ? acharProdutoDaNota(i, pidx) : pidx.find({ nome: i.descricao }))) novosProdutos.add(norm(i.descricao)); }
       if (r.op === 'estoque' && r.produto_nome && !pidx.find({ nome: r.produto_nome })) novosProdutos.add(norm(r.produto_nome));
     } else if (tipo === 'vendas' && r.chave_nfe) {
       dup = db.get('SELECT id FROM vendas WHERE chave_nfe = ?', r.chave_nfe);

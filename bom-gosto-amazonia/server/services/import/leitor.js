@@ -4,6 +4,7 @@ import JSZip from 'jszip';
 import { lerNFe } from './nfe.js';
 import { lerOFX } from './ofx.js';
 import { extrairPaginas, tabelaDePdf, lerComprovantePix } from './pdf.js';
+import { lerRelatorio } from './relatorios.js';
 import { prepararTabela } from './tabela.js';
 import { lerXlsx } from './xlsx.js';
 import { reconhecerPlanilha } from './perfis-bomgosto.js';
@@ -70,7 +71,7 @@ export async function lerArquivo({ buffer, nome }, profundidade = 0) {
     if (ext === '.zip') {
       if (profundidade > 0) return [{ nome, formato: 'zip', kind: 'erro', motivo: 'ZIP dentro de ZIP não é aceito.' }];
       const zip = await JSZip.loadAsync(buffer);
-      const entradas = Object.values(zip.files).filter((f) => !f.dir && !/(^|\/)(__MACOSX|\.)/.test(f.name) && /\.(xml|pdf|csv|tsv|xlsx|xlsm|ofx|txt)$/i.test(f.name));
+      const entradas = Object.values(zip.files).filter((f) => !f.dir && !/(^|\/)(__MACOSX|\.)/.test(f.name) && /\.(xml|pdf|csv|tsv|xlsx|xlsm|ofx|txt)$/i.test(f.name) && !/conte.{1,8}do desta pasta\.txt$/i.test(f.name)); // (o sistema de notas põe um "Conteúdo desta pasta.txt" em cada ZIP)
       if (entradas.length > 800) return [{ nome, formato: 'zip', kind: 'erro', motivo: 'ZIP com arquivos demais (máximo 800).' }];
       let total = 0;
       const docs = [];
@@ -114,6 +115,13 @@ export async function lerArquivo({ buffer, nome }, profundidade = 0) {
       const comTexto = paginas.filter((p) => p.itens.length > 0);
       if (!comTexto.length) {
         return [{ nome, formato: 'pdf', kind: 'erro', motivo: 'Este PDF é uma imagem (escaneado/foto) e não tem texto para ler. Envie o PDF original do sistema ou do banco, ou use o lançamento manual.' }];
+      }
+      // relatórios que a empresa tira do sistema e do banco: leitura própria (por posição das colunas)
+      const rel = lerRelatorio(comTexto);
+      if (rel) {
+        if (rel.motivo) return [{ nome, formato: 'pdf', kind: 'erro', motivo: rel.motivo }];
+        if (!rel.linhas.length) return [{ nome, formato: 'pdf', kind: 'erro', motivo: 'Reconheci o relatório, mas não encontrei nenhuma linha para ler.' }];
+        return [{ nome, formato: 'pdf', kind: 'relatorio', relatorio: rel }];
       }
       const recibos = comTexto.map((p) => lerComprovantePix(p)).filter(Boolean);
       if (recibos.length && recibos.length >= comTexto.length * 0.5) {

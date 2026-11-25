@@ -199,6 +199,25 @@ export function canonizarVendedores(nomes, existentes = []) {
   };
 }
 
+// ================================================================== NOTAS FISCAIS
+/**
+ * Código de barras (cProd da nota) → nome curto que a equipe usa nas planilhas (as colunas do Controle).
+ * Conferido nota a nota: as quantidades das notas batem 100% com as do Controle para estes produtos.
+ * Com isto, as notas entram nos MESMOS produtos que as planilhas já criaram, em vez de criar um "BOLACHA PRINCESINHA 400G" duplicado.
+ */
+export const PRODUTOS_DA_NOTA = {
+  7898971278060: '400G', // BOLACHA PRINCESINHA 400G
+  7898971278008: '300G', // BOLACHA PRINCESINHA 300G
+  7898971278015: '200G', // BOLACHA PRINCESINHA 200G
+  7898971278084: 'PALITO', // PALITO PRINCESINHA 20X120G
+  7898971278091: 'ROSCA', // ROSCA PRINCESINHA 20X120G
+  7898952718028: '400BG', // BISCOITO AGUA E SAL 20X400gr BOM GOSTO
+  7898952718110: '300BG', // BISCOITO AGUA E SAL 20x300G - BOM GOSTO
+  7898952718097: 'CRAK', // BISCOITO CRAKINHA 20x300G - BOM GOSTO
+  7898952718073: 'AMANT', // BISC. RECREIO AMANTEIGADO 20X300GR
+  7898952718103: 'DOCE', // BISC. RECREIO DOCE 20X300GR
+};
+
 // ================================================================== CONTROLE (vendas por vendedor, depósito, produção)
 const PRODUTOS_PADRAO = ['400BG', '300BG', 'CRAK', 'FOLHADO', '30GR', 'AMANT', 'DOCE', 'MAIZENA', '400G', '300G', '200G', 'ROSCA', 'PALITO'];
 // colunas da aba PRODUÇÃO (na ordem) → produto do depósito (confere com as fórmulas da própria planilha)

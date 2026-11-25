@@ -294,6 +294,10 @@ const MIGRATIONS = [
     primeira INTEGER NOT NULL
   );
   `,
+  // ---------- 3: o que uma importação MUDOU em dados que já existiam (como estavam antes), para o "Desfazer" devolver tudo ----------
+  `
+  ALTER TABLE importacoes ADD COLUMN desfazer_json TEXT;
+  `,
 ];
 
 function migrate() {
