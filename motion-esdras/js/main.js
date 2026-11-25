@@ -4,6 +4,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SoftBloomPass } from './bloom.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import opentype from 'three/addons/libs/opentype.module.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import * as U from './util.js';
@@ -769,14 +770,15 @@ const cams = {
   },
 };
 const transitions = [
-  { a: 'A', b: 'B', t0: 8.38, t1: 8.95 },
-  { a: 'B', b: 'C', t0: 10.12, t1: 10.56 },
-  { a: 'C', b: 'D', t0: 12.36, t1: 12.74 },
-  { a: 'D', b: 'E', t0: 15.12, t1: 15.48 },
-  { a: 'E', b: 'F', t0: 18.15, t1: 19.0 },
-  { a: 'F', b: 'H', t0: 24.98, t1: 25.36 },
+  { a: 'A', b: 'B', t0: 8.3, t1: 9.0 },
+  { a: 'B', b: 'C', t0: 10.04, t1: 10.62 },
+  { a: 'C', b: 'D', t0: 12.28, t1: 12.86 },
+  { a: 'D', b: 'E', t0: 15.04, t1: 15.56 },
+  { a: 'E', b: 'F', t0: 18.02, t1: 19.08 },
+  { a: 'F', b: 'H', t0: 24.92, t1: 25.46 },
 ];
-const easeTrans = (x) => (x < 0.5 ? 16 * x ** 5 : 1 - Math.pow(-2 * x + 2, 5) / 2) * 0.85 + easeInOutCubic(x) * 0.15;
+// C2-smooth (velocity and acceleration start/end at zero) with a softened peak
+const easeTrans = (x) => U.smoother(x) * 0.7 + (0.5 - 0.5 * Math.cos(Math.PI * x)) * 0.3;
 function camState(t) {
   let st = 'A';
   for (const tr of transitions) {
@@ -799,10 +801,25 @@ function fovPunch(t) {
 }
 
 // ---------------------------------------------------------------- post
-const rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+const rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType });
+const sceneRT = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+const accRT = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, depthBuffer: false });
+const accQuad = new FullScreenQuad(new THREE.ShaderMaterial({
+  uniforms: { tSrc: { value: null }, uW: { value: 1 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }`,
+  fragmentShader: `uniform sampler2D tSrc; uniform float uW; varying vec2 vUv; void main(){ gl_FragColor = vec4(texture2D(tSrc, vUv).rgb * uW, 1.0); }`,
+  blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
+  depthTest: false, depthWrite: false,
+}));
 const composer = new EffectComposer(renderer, rt);
 composer.setPixelRatio(1); composer.setSize(W, H);
-composer.addPass(new RenderPass(scene, camera));
+const srcPass = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, tAcc: { value: null } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `uniform sampler2D tAcc; varying vec2 vUv; void main(){ gl_FragColor = texture2D(tAcc, vUv); }`,
+});
+srcPass.uniforms.tAcc.value = accRT.texture; // set after construction (render-target textures are not cloneable)
+composer.addPass(srcPass);
 const blurPass = new ShaderPass({
   uniforms: { tDiffuse: { value: null }, uDir: { value: new THREE.Vector2() }, uRad: { value: 0 } },
   vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
@@ -840,39 +857,66 @@ let OV;
 
 // ---------------------------------------------------------------- frame
 const prevCam = new THREE.PerspectiveCamera(40, W / H, 0.05, 700);
-function renderFrame(t, frameIndex = 0) {
+const SHUTTER = 0.6 / 60; // 216-degree shutter
+function setState(t) {
   updA(t); updB(t); updC(t); updD(t); updE(t); updF(t); updH(t);
-  // environment light sweep for chrome
   scene.environmentRotation.set(0, -0.9 + 1.8 * smooth(prog(t, 6.6, 8.6)) + (t > 24 ? Math.sin(t * 0.55) * 0.7 : 0), 0);
   const s = camState(t); s.fov += fovPunch(t);
   applyCam(camera, s);
-  const sp = camState(t - 1 / 120); sp.fov += fovPunch(t - 1 / 120);
-  applyCam(prevCam, sp);
-  // motion blur from camera movement
-  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-  const P = camera.position.clone().addScaledVector(fwd, 8);
-  const ndc = P.clone().project(prevCam);
-  const dir = new THREE.Vector2(ndc.x * 0.5, ndc.y * 0.5);
-  if (dir.length() > 0.07) dir.setLength(0.07);
-  const vel = camera.position.clone().sub(prevCam.position);
-  let rad = vel.dot(fwd) / 6.0;
-  rad = clamp(rad, -0.12, 0.12);
-  blurPass.uniforms.uDir.value.copy(dir.length() > 0.0015 ? dir : dir.set(0, 0));
-  blurPass.uniforms.uRad.value = Math.abs(rad) > 0.002 ? rad : 0;
   bgDome.position.copy(camera.position);
   bgU.uTime.value = t;
   dustU.uTime.value = t;
   dustU.uScale.value = H / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+}
+// screen-space camera motion across the shutter interval
+function motion(t) {
+  const a = camState(t - SHUTTER / 2); a.fov += fovPunch(t - SHUTTER / 2); applyCam(prevCam, a);
+  const b = camState(t + SHUTTER / 2); b.fov += fovPunch(t + SHUTTER / 2); applyCam(camera, b);
+  const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  const P = camera.position.clone().addScaledVector(fwd, 8);
+  const ndc = P.clone().project(prevCam);
+  const dir = new THREE.Vector2(ndc.x * 0.5, ndc.y * 0.5);
+  const rad = camera.position.clone().sub(prevCam.position).dot(fwd) / 6.0;
+  const px = (dir.length() + Math.abs(rad) * 0.35) * H;
+  return { dir, rad, px };
+}
+function subframes(t) {
+  const m = motion(t);
+  // fast object motion moments also get extra samples
+  const objFast = (t > 8.3 && t < 9.0) || (t > 4.15 && t < 5.1) || (t > 22.55 && t < 25.0) || (t > 28.5 && t < 28.9) ? 3 : 1;
+  return { m, n: Math.max(objFast, Math.min(10, Math.ceil(m.px / 2.8))) };
+}
+window.__subframes = (t) => subframes(t).n;
+function renderFrame(t, frameIndex = 0) {
+  const { m, n } = subframes(t);
+  const prevAuto = renderer.autoClear;
+  renderer.autoClear = false;
+  renderer.setRenderTarget(accRT); renderer.setClearColor(0x000000, 1); renderer.clear(true, false, false);
+  for (let i = 0; i < n; i++) {
+    const ts = n === 1 ? t : t + ((i + 0.5) / n - 0.5) * SHUTTER;
+    setState(ts);
+    renderer.setRenderTarget(sceneRT); renderer.setClearColor(0x02040c, 1); renderer.clear(true, true, true);
+    renderer.render(scene, camera);
+    accQuad.material.uniforms.tSrc.value = sceneRT.texture; accQuad.material.uniforms.uW.value = 1 / n;
+    renderer.setRenderTarget(accRT); accQuad.render(renderer);
+  }
+  renderer.autoClear = prevAuto;
+  if (n > 1) setState(t);
+  // residual directional blur fills the gaps between sub-frames
+  const dir = m.dir.clone().multiplyScalar(1 / n);
+  if (dir.length() > 0.05) dir.setLength(0.05);
+  const rad = clamp(m.rad / n, -0.08, 0.08);
+  blurPass.uniforms.uDir.value.copy(dir.length() > 0.0012 ? dir : dir.set(0, 0));
+  blurPass.uniforms.uRad.value = Math.abs(rad) > 0.0015 ? rad : 0;
   dustU.uBoost.value = 0.6 * pulse(t, DROP, 0.04, 0.9) + 0.25 * pulse(t, HIT, 0.04, 0.6);
   bloom.strength = 0.16 * (1 + 0.6 * pulse(t, DROP, 0.04, 0.7) + 0.35 * pulse(t, HIT, 0.04, 0.5));
-  // flashes + fades
-  const flash = 0.22 * pulse(t, DROP, 0.03, 0.5) + 0.22 * Math.max(0, 1 - Math.abs(t - 15.3) / 0.16) + 0.06 * pulse(t, HIT, 0.03, 0.4) + 0.08 * pulse(t, 24.36, 0.03, 0.3);
+  const flash = 0.22 * pulse(t, DROP, 0.03, 0.5) + 0.2 * Math.max(0, 1 - Math.abs(t - 15.3) / 0.2) + 0.06 * pulse(t, HIT, 0.03, 0.4) + 0.08 * pulse(t, 24.36, 0.03, 0.3);
   gradePass.uniforms.uFlash.value = flash;
   gradePass.uniforms.uFade.value = smooth(prog(t, 0.0, 0.9)) * (1 - smooth(prog(t, END - 0.7, END)));
   gradePass.uniforms.uSeed.value = frameIndex % 1000;
   composer.render();
   OV.update(t);
-  return true;
+  return n;
 }
 
 async function init() {
